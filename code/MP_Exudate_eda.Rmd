@@ -13,7 +13,6 @@ knitr::opts_chunk$set(echo = TRUE, message = F, echo = F, warning = F)
 ```{r}
 
 
-setwd("/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/MP Exudate Sampling/data/Compiled Data/")
 
 library(tidyverse)
 library(lmodel2)
@@ -25,6 +24,7 @@ library(factoextra)
 library(mgcv)
 library(janitor)
 library(broom)
+library(here)
 library(rstatix)
 library(ggpubr)
 library(vegan)
@@ -40,16 +40,16 @@ library(sicegar)
 
 ```{r}
 
-MP_age_data_sum <- read_xlsx("MP_Exudate_age_230809.xlsx", sheet = 1)
+MP_age_data_sum <-read_csv(here("Data","MP_age_data_sum.csv"))
 
-MP_DOC_NPP_phys_env_sum <- read_xlsx("MP_Exudate_age_230809.xlsx", sheet = 4)
+MP_DOC_NPP_phys_env_sum <- read_csv(here("Data", "MP_DOC_NPP_phys_env_sum.csv"))
 
 MP_DOC_NPP_phys_env_sum_noflags  <- MP_DOC_NPP_phys_env_sum %>% 
   filter(flag != 2)
 
-MP_DOM_Sugar <- read_xlsx("MP_Exudate_age_230809.xlsx", sheet = 3) 
+MP_DOM_Sugar <- read_csv(here("Data", "MP_DOM_Sugar.csv")) 
 
-MP_DOM_character <- read_xlsx("MP_Exudate_age_230809.xlsx", sheet = 2)
+MP_DOM_character <- read_csv(here("Data", "MP_DOM_character.csv"))
 
 MK_PAR <- read_xlsx("MK_PAR_2013_2014_2014_August.xlsx")
 
@@ -1617,6 +1617,35 @@ bxp +
 senescent_kelp <- MP_DOC_NPP_phys_env_sum_noflags %>% 
   select(age_d, DOC_umolC_g_hr, dry_mass_g, tissue_C_percent, Chl_C) %>% 
   filter(age_d > 50)
+
+
+
+
+# Plot DOC release rate as a function of Chl:C
+
+
+senescent_kelp %>% 
+  ggplot(aes(x = Chl_C*1000, y = DOC_umolC_g_hr)) +
+   geom_point(size = 5) +
+  xlab(expression(Chl:C~(mg^{"1"} ~ g^{"-1"}))) +
+  ylab(expression(DOC~Production~(µmolC ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 24),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 30, color = "black"),
+        axis.title = element_text(size = 30),
+        text = element_text(family = "Times"))
+
+
+
+
 
 
 
