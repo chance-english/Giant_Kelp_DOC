@@ -1,0 +1,395 @@
+---
+title: "Kelp Biomass Map"
+author: "Chance English"
+date: "7/23/2024"
+output: html_document
+---
+
+
+```{r setup, include=FALSE, echo=F, warning=F, message=F}
+knitr::opts_chunk$set(echo = TRUE, message = F, echo = F, warning = F)
+```
+
+```{r}
+
+
+setwd("/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/MP Exudate Sampling/data/Compiled Data/")
+
+library(tidyverse)
+library(lmodel2)
+library(ggplot2)
+library(readxl)
+library(kableExtra)
+library(scales)
+library(factoextra)
+library(mgcv)
+library(janitor)
+library(broom)
+library(rstatix)
+library(ggpubr)
+library(vegan)
+library(ggbump)
+library(maps)
+library(mapdata)
+library(ggmap)
+library(reshape2)
+
+```
+
+# Map of california coastline 
+
+```{r}
+
+states <- map_data("state")
+
+ca_df <- states %>%
+  filter(region == "california")
+
+ca_base <- ggplot(data = ca_df, mapping = aes(x = long, y = lat, group = group)) + 
+  coord_quickmap() + 
+  geom_polygon(color = "black", fill = "gray")
+
+
+
+
+```
+
+
+
+# Load in Quarterly Kelp Biomass Data from 1987-2019
+
+
+```{r}
+
+
+annual_kelp_biomass <- read_xlsx("kelp_no3_waves_annual_long.xlsx")
+
+kelp_biomass_lat_long <- read_xlsx("locations.xlsx")
+
+
+
+```
+
+
+# Summarize Average Annual Biomass at each site 
+
+```{r}
+
+
+site_avg_annual_kelp_biomass <- annual_kelp_biomass %>% 
+  group_by(site_id) %>% 
+  summarise(avg_biomass_kg_ww = mean(kelp)) %>% 
+  ungroup()
+
+annual_biomass_total <- annual_kelp_biomass %>% 
+  group_by(year) %>% 
+  summarise(total_biomass = sum(kelp)/1000/1000*0.11*0.32*1.77) %>% 
+  ungroup()
+
+min(annual_biomass_total$total_biomass)
+max(annual_biomass_total$total_biomass)
+
+
+
+```
+
+
+# Merge Annual Kelp Biomass at site with lat and long data 
+
+```{r}
+
+avg_biomass_lat_long <- merge(site_avg_annual_kelp_biomass, kelp_biomass_lat_long, by = c("site_id"))
+
+
+avg_biomass_lat_long <- avg_biomass_lat_long %>% 
+  mutate(long = lon,
+         lat = lat)
+
+total_avg_biomass <- sum(avg_biomass_lat_long$avg_biomass_kg_ww)/1000/1000*0.13 
+
+```
+
+
+# Add Kelp Biomass Data to Map of California 
+
+
+```{r}
+
+mid <- median(avg_biomass_lat_long$avg_biomass_kg_ww)
+
+ca_kelp_biomass <- ggplot() + 
+  coord_quickmap() + 
+  geom_polygon(data = ca_df, 
+               mapping = aes(x = long, 
+                             y = lat, 
+                             group = group), 
+               color = "black", 
+               fill = "gray") +
+  geom_point(data = avg_biomass_lat_long, 
+             aes(x = long, 
+                 y = lat, 
+                 color = avg_biomass_kg_ww/100000), 
+             size = 4,
+             position = position_jitter(width = 0.1, height = 0.1)) +
+  scale_color_gradient2(midpoint = mid/100000, 
+                        low = "yellow", 
+                        mid = "yellow3",
+                        high = "olivedrab4", 
+                        space = "Lab", 
+                        name = expression(paste("Biomass (","10"^5," kg)")),
+                        breaks = c(0, 0.1, 1, 10, 20),
+                        trans = "log10") +
+  labs(x = "Longitude (ºW)",
+       y = "Latitude (ºN)") +
+   theme(panel.background = element_rect(fill = "white", 
+                                         color = "black", 
+                                         size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.4, "inch"),
+        legend.key.width = unit(0.6, "inch"),
+        legend.position = "top",
+        legend.title = element_text(size = 25),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 25),
+        text = element_text(family = "Times"))
+
+  
+
+ ggsave(file="ca_kelp_biomass.svg", plot= ca_kelp_biomass, width=10, height=10)
+
+
+
+```
+
+
+# M pyrifera and bull kelp data from SBC LTER NC Files 
+
+https://doi.org/10.6073/pasta/c40db2c8629cfa3fbe80fdc9e086a9aa 
+
+```{r}
+
+library(ncdf4) # package for netcdf manipulation
+library(raster) # package for raster manipulation
+library(rgdal) # package for geospatial analysis
+library(ggplot2)
+
+
+```
+
+
+# Load Data 
+
+```{r}
+    
+nc_data <- nc_open('CAkelpCanopyEnv_2021_final.nc')
+
+
+lon <- ncvar_get(nc_data, "lon")
+lat <- ncvar_get(nc_data, "lat")
+year <- ncvar_get(nc_data, "year")
+quarter <- ncvar_get(nc_data, "quarter")
+biomass <- ncvar_get(nc_data, "biomass")
+area <- ncvar_get(nc_data, "area")
+
+
+
+```
+
+
+
+```{r}
+
+latitude <- as.numeric(lat[1:332640])
+longitude <- as.numeric(lon[1:332640])
+
+year <- as.numeric(year[1:152])
+quarter <- as.numeric(quarter[1:152])
+
+biomass_df <- as.data.frame(biomass)
+area_df <- as.data.frame(area)
+
+year_quarter_df <- as.data.frame(year) %>% 
+  mutate(quarter = quarter)
+
+year_quarter_df$year_quarter <- paste(year_quarter_df$year,year_quarter_df$quarter,sep="_")
+
+year_quarter <- year_quarter_df$year_quarter
+
+
+
+colnames(biomass_df) <- year_quarter
+
+# Get Biomass and Calculate Total Quarterly Biomass for every year
+
+biomass_df_year_quarter <- biomass_df %>% 
+  mutate(
+    lat = latitude,
+    long = longitude
+  ) 
+
+
+
+biomass_long <- melt(biomass_df_year_quarter, 
+                     id.vars = c("lat", "long"),
+                     variable.name = "year_quarter",
+                     value.name = "kelp_biomass")
+
+biomass_long_noNA <- biomass_long %>% 
+  filter(kelp_biomass != "NA") %>% 
+  filter(kelp_biomass != 0)
+
+biomass_long_no_blank_images_df <- biomass_long_noNA %>% 
+  separate(year_quarter, into = c("year", "quarter"), sep = "_")
+
+biomass_2021_summer_noNA <- biomass_long_no_blank_images_df %>% 
+  filter(year == 2021, quarter == 3)
+
+annual_quarterly_kelp_biomass <- biomass_long_no_blank_images_df %>% 
+  group_by(year, quarter) %>% 
+  summarize(total_biomass_kg_ww = sum(kelp_biomass))
+
+
+write.csv(biomass_long, "~/kelp_area_latlong_time.csv", row.names = F)
+
+
+
+# Kelp Total Kelp Area 
+
+colnames(area_df) <- year_quarter
+
+area_df_year_quarter <- area_df %>% 
+  mutate(
+    lat = latitude,
+    long = longitude
+  ) 
+
+
+
+area_long <- melt(area_df_year_quarter, 
+                     id.vars = c("lat", "long"),
+                     variable.name = "year_quarter",
+                     value.name = "kelp_area")
+
+area_long_noNA <- area_long %>% 
+  filter(kelp_area != "NA") %>% 
+  filter(kelp_area != 0) %>% 
+  filter(lat <= 37.52588)
+
+area_long_no_blank_images_df <- area_long_noNA %>% 
+  separate(year_quarter, into = c("year", "quarter"), sep = "_")
+
+annual_quarterly_kelp_area <- area_long_no_blank_images_df %>% 
+  group_by(year, quarter) %>% 
+  summarize(total_area_km2 = sum(kelp_area)/1000000)
+
+
+# Merge Annual Kelp Biomass and Area
+
+kelp_annual_quarterly_biomass_area <- merge(annual_quarterly_kelp_biomass, annual_quarterly_kelp_area, by = c("year", "quarter"))
+
+
+write.csv(kelp_annual_quarterly_biomass_area, file = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/MP Exudate Sampling/data/Compiled Data/kelp_annual_quarterly_biomass_area.csv", row.names = FALSE)
+
+
+```
+
+
+```{r}
+
+kelp_biomass_p <- ggplot() + 
+  coord_quickmap() + 
+  geom_polygon(data = ca_df, 
+               mapping = aes(x = long, 
+                             y = lat, 
+                             group = group), 
+               color = "black", 
+               fill = "gray") +
+  geom_point(data = biomass_2021_summer_noNA, 
+             aes(x = long, 
+                 y = lat, 
+                 color = kelp_biomass/1000), 
+             size = 2,
+             position = position_jitter(width = 0.025, height = 0.025)) +
+  labs(x = "Longitude (ºW)",
+       y = "Latitude (ºN)") +
+  scale_color_gradient2(midpoint = 1, 
+                        low = "gold", 
+                        mid = "goldenrod1",
+                        high = "goldenrod4", 
+                        space = "Lab",
+                        name = "Canopy Biomass\n(Mg WW)",
+                        breaks = c(1,4,8,12)) +
+   theme(panel.background = element_rect(fill = "white", 
+                                         color = "black", 
+                                         size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.3, "inch"),
+        legend.key.width = unit(0.3, "inch"),
+        legend.position = c(0.75,0.78),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 25),
+        text = element_text(family = "Times"))
+
+
+
+
+ggsave(file="ca_kelp_area_orange.svg", plot= kelp_area_p, width=10, height=10)
+
+
+```
+
+
+Plot annual/quarterly totals
+
+```{r}
+
+kelp_annual_quarterly_biomass_area <- read_csv("kelp_annual_quarterly_biomass_area.csv")
+
+
+
+kelp_biomass_CA_annual <- ggplot(data = kelp_annual_quarterly_biomass_area, 
+       aes(x = interaction(year, 
+                           quarter, 
+                           lex.order = TRUE), 
+           y = total_biomass_kg_ww, 
+           group = 1)) +
+  labs(y = "Canopy Biomass (kg WW)") +
+  geom_line(colour = "blue") +
+  coord_cartesian(ylim = c(800000, 500000000), expand = FALSE, clip = "off") +
+  theme_bw() +
+  scale_x_discrete(breaks = c("1990", "2020")) +
+   theme(panel.background = element_rect(fill = "white", 
+                                         color = "black", 
+                                         size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 25),
+        text = element_text(family = "Times"))
+
+
+
+
+
+```
+

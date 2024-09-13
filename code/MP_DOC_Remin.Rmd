@@ -1,0 +1,193 @@
+---
+title: "MP DOM Remineralization"
+author: "Chance English"
+date: "6/1/2024"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo=F, warning=F, message=F}
+knitr::opts_chunk$set(echo = TRUE, message = F, echo = F, warning = F)
+```
+
+```{r}
+
+
+setwd("/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/MP Exudate Sampling/data/Compiled Data/")
+
+library(tidyverse)
+library(lmodel2)
+library(ggplot2)
+library(readxl)
+library(kableExtra)
+library(scales)
+library(factoextra)
+library(mgcv)
+library(janitor)
+library(broom)
+library(rstatix)
+library(ggpubr)
+library(vegan)
+library(ggbump)
+
+
+```
+
+# Load DOM Remineralization Data
+
+```{r}
+
+DOM_remin <- read_xlsx("DOM_remineralization.xlsx") %>% 
+  mutate(blade = as.character(blade))
+
+
+
+
+
+```
+
+
+# Summarize Amendment Concnetration, Change over Entire Incubation and Percent Bioavailability
+
+```{r}
+
+# Calculate ammendments (µMC), the change in DOC relative to controls and the percent of the ammended DOC that remained after 80-90 days. Error for percent bioavailable is the standard error for the change in zeroed DOC divided by the DOC ammendment. 
+
+
+DOM_remin_norm <- DOM_remin %>% 
+  filter(DOC_uMC != "NA") %>% 
+  group_by(timepoint, age_d) %>% 
+  summarise(blade = blade,
+            days = days,
+            DOC_amended = round(DOC_uMC - DOC_uMC[treatment == "Control"],1),
+            DOC_amended_sd = round(sqrt(DOC_sd^2 + DOC_sd[treatment == "Control"]^2),2)) %>% 
+  ungroup() %>% 
+  group_by(blade, age_d) %>% 
+  mutate(DOC_norm = round(DOC_amended/DOC_amended[timepoint == 0]*100,0),
+         DOC_norm_sd = round(DOC_amended_sd / DOC_amended[timepoint == 0] * 100,0)) %>% 
+  ungroup() %>% 
+  filter(blade != "0")
+
+
+
+# Subset and merge data for dataframe with Kelp Collection date, metadata, DOC amended, percent bioavailability
+
+DOM_remin_amended_metadata <- DOM_remin_norm %>% 
+  select(age_d, timepoint, blade, DOC_amended, DOC_amended_sd) %>% 
+  filter(timepoint == 0, blade != 0)
+
+
+
+DOM_bioavailability_metadata <- DOM_remin_norm %>% 
+  select(age_d, timepoint, blade, DOC_norm, DOC_norm_sd) %>% 
+  filter(timepoint == 3, blade != 0) 
+
+DOM_amendment_bioavailability_metadata <- merge(DOM_remin_amended_metadata, DOM_bioavailability_metadata, by = c("age_d", "blade")) %>% 
+  mutate(bioavailability_percent = 100-DOC_norm, bioavailability_percent_sd = DOC_norm_sd, recalcitrant_percent = DOC_norm) %>% 
+  select(-c(timepoint.x, timepoint.y, DOC_norm, DOC_norm_sd))
+
+
+```
+
+
+
+
+
+
+
+# Visualize TOC Remineralization over time 
+
+
+```{r}
+
+DOM_remin_plot <- DOM_remin %>% 
+  filter(DOC_uMC != "NA") %>% 
+  group_by(age_d, timepoint) %>% 
+  summarise(blade = blade,
+            days = days,
+            DOC_corr = DOC_uMC - DOC_uMC[treatment == "Control"],
+            DOC_corr_sd = sqrt(DOC_sd^2 + DOC_sd[treatment == "Control"]^2),
+            age_d = age_d) %>% 
+  ungroup() %>% 
+  group_by(blade) %>% 
+  mutate(DOC_norm = round(DOC_corr/DOC_corr[timepoint == 0]*100,0),
+         DOC_norm_sd = round(DOC_corr_sd / DOC_corr[timepoint == 0] * 100,0)) %>% 
+  ungroup() %>% 
+  filter(blade != "0") %>% 
+  ggplot(aes(x = days, y = DOC_norm)) +
+  geom_point(aes(color = blade), size = 6) +
+  geom_line(aes(color = blade), orientation = "x") + 
+  labs(x = "Days",
+       y = "DOC (% Initial)",
+       color = "Blade") +
+  scale_x_continuous(limits = c(0,100)) +
+  scale_y_continuous(limits = c(0,100), breaks = c(0,25,50,75,100)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_rect(fill = "white", color = "black", size = 1.5),
+        strip.text.x = element_text(),
+        legend.key = element_rect(fill = "white"),
+        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 15),
+        strip.text = element_text(size = "20"),
+        axis.text = element_text(size = 20),
+        axis.title = element_text(size = 25),
+        text = element_text(family = "Times"),
+        legend.position = "top")
+
+
+
+
+
+```
+
+
+# Summarize Removal by Age 
+
+
+```{r}
+
+DOM_remin %>% 
+  filter(DOC_uMC != "NA") %>% 
+  group_by(kelp_collection_date, timepoint, age_d) %>% 
+  summarise(blade = blade,
+            days = days,
+            DOC_corr = DOC_uMC - DOC_uMC[treatment == "Control"],
+            DOC_corr_sd = sqrt(DOC_sd^2 + DOC_sd[treatment == "Control"]^2)) %>% 
+  ungroup() %>% 
+  group_by(blade) %>% 
+  mutate(DOC_norm = round(DOC_corr/DOC_corr[timepoint == 0]*100,0),
+         DOC_norm_sd = round(DOC_corr_sd / DOC_corr[timepoint == 0] * 100,0)) %>% 
+  ungroup() %>% 
+  filter(blade != "0") %>% 
+  group_by(kelp_collection_date, timepoint, age_d) %>% 
+  summarise(days = days,
+            DOC_norm_avg = mean(DOC_norm), 
+            DOC_norm_sd = sd(DOC_norm)) %>% 
+  ggplot(aes(x = days, y = DOC_norm_avg)) +
+  geom_point(aes(color = age_d), size = 6) +
+  geom_errorbar(aes(ymin = DOC_norm_avg - DOC_norm_sd, 
+                    ymax = DOC_norm_avg + DOC_norm_sd,
+                    width = 0)) +
+  labs(x = "Days",
+       y = "DOC (% Initial)") +
+  scale_x_continuous(limits = c(0,100)) +
+  scale_y_continuous(limits = c(0,100), breaks = c(0,25,50,75,100)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_rect(fill = "white", color = "black", size = 1.5),
+        strip.text.x = element_text(),
+        legend.key = element_rect(fill = "white"),
+        legend.title = element_text(size = 20),
+        legend.text = element_text(size = 15),
+        strip.text = element_text(size = "20"),
+        axis.text = element_text(size = 20),
+        axis.title = element_text(size = 25),
+        text = element_text(family = "Times"),
+        legend.position = "top")
+
+
+
+```
+
