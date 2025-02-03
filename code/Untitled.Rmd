@@ -1,0 +1,1336 @@
+---
+title: "Figures"
+author: "Chance English"
+date: "10/16/2024"
+output: html_document
+---
+
+
+```{r setup, include=FALSE, echo=F, warning=F, message=F}
+knitr::opts_chunk$set(echo = TRUE, message = F, echo = F, warning = F)
+```
+
+```{r, include=FALSE, echo=F, warning=F, message=F}
+
+
+
+library(tidyverse)
+library(lmodel2)
+library(ggplot2)
+library(readxl)
+library(kableExtra)
+library(scales)
+library(factoextra)
+library(mgcv)
+library(janitor)
+library(broom)
+library(here)
+library(rstatix)
+library(ggpubr)
+library(vegan)
+library(ggbump)
+library(RColorBrewer)
+library(scico)
+library(sicegar)
+
+library(cowplot)
+
+```
+
+# Data
+
+```{r, include=FALSE, echo=F, warning=F, message=F}
+
+MP_age_data_sum <-read_csv(here("Data","MP_age_data_sum.csv"))
+
+MP_DOC_NPP_phys_env_sum <- read_csv(here("Data", "MP_DOC_NPP_phys_env_sum.csv"))
+
+MP_DOC_NPP_phys_env_sum_flags  <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(flag != 2) %>% 
+  filter(season %in% c("Spring", "Summer"))
+
+MP_DOM_Sugar <- read_csv(here("Data", "MP_DOM_Sugar.csv")) 
+
+MP_DOM_character <- read_csv(here("Data", "MP_DOM_character.csv"))
+
+
+
+```
+
+
+Table 1
+
+```{r}
+
+```
+
+
+
+# Figure 1: Chl:C and NPP Changes with age
+
+
+```{r}
+
+# A
+
+Chl_C_age_summer <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(season == "Summer") %>% 
+  group_by(age_d) %>% 
+  filter(Chl_C != "NA", 
+         lightlevel_timepoint %in% c(1,2)) %>% 
+  summarise(Chl_C_avg = mean(Chl_C), 
+            sd_Chl_C = sd(Chl_C),
+            season = season) %>% 
+  ungroup() 
+
+
+
+
+Chl_C_age_spring <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(season == "Spring") %>% 
+  group_by(age_d) %>% 
+  filter(Chl_C != "NA", 
+         lightlevel_timepoint %in% c(1,2)) %>% 
+  summarise(Chl_C_avg = mean(Chl_C), 
+            sd_Chl_C = sd(Chl_C),
+            season = season) %>% 
+  ungroup() 
+
+
+
+ Chl_C_age <- MP_DOC_NPP_phys_env_sum %>% 
+  group_by(age_d) %>% 
+  filter(Chl_C != "NA", 
+         lightlevel_timepoint %in% c(1,2)) %>% 
+  summarise(Chl_C_avg = mean(Chl_C), 
+            sd_Chl_C = sd(Chl_C)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = age_d, 
+             y = Chl_C_avg*1000)) +
+  geom_point(size = 6) +
+  geom_sigmoid(aes(y = Chl_C_avg[age_d==min(age_d)]*1000, 
+                   yend = Chl_C_avg[age_d==max(age_d)]*1000, 
+                   x = min(age_d), 
+                   xend =max(age_d)), size = 1) +
+  ylab(expression(Chl:C~(mg^{"1"} ~ g^{"-1"}))) +
+  labs(x = "Age (d)") + 
+  scale_y_continuous(labels = label_number(accuracy = 1), 
+                     breaks = c(0,2,4,6,8,10), limits = c(0,10)) +
+  geom_errorbar(aes(x = age_d, 
+                    y = Chl_C_avg*1000, 
+                    ymin =  Chl_C_avg*1000 - sd_Chl_C*1000, 
+                    ymax = Chl_C_avg*1000 + sd_Chl_C*1000), 
+                width = 0) +
+  theme(panel.background = element_rect(fill = "white", 
+                                        color = "black", 
+                                        size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 30, 
+                                 color = "black"),
+        axis.title = element_text(size = 30),
+        text = element_text(family = "Times"))
+
+ 
+ 
+  
+Chl_C_age_cohorts <- ggplot() +
+  geom_point(aes(x = Chl_C_age_summer$age_d, 
+             y = Chl_C_age_summer$Chl_C_avg*1000), 
+             shape = 17, 
+             size = 5) +
+  geom_point(aes(x = Chl_C_age_spring$age_d, 
+             y = Chl_C_age_spring$Chl_C_avg*1000),
+             shape = 19, 
+             size = 5) +
+  geom_errorbar(aes(x = Chl_C_age_spring$age_d, 
+                    y = Chl_C_age_spring$Chl_C_avg*1000, 
+                    ymin =  Chl_C_age_spring$Chl_C_avg*1000 - Chl_C_age_spring$sd_Chl_C*1000, 
+                    ymax = Chl_C_age_spring$Chl_C_avg*1000 + Chl_C_age_spring$sd_Chl_C*1000), 
+                width = 0) +
+  geom_sigmoid(aes(y = Chl_C_age_summer$Chl_C_avg[Chl_C_age_summer$age_d==min(Chl_C_age_summer$age_d)]*1000, 
+                   yend = Chl_C_age_summer$Chl_C_avg[Chl_C_age_summer$age_d==max(Chl_C_age_summer$age_d)]*1000, 
+                   x = min(Chl_C_age_summer$age_d), 
+                   xend = 100), 
+               size = 1) +
+  ylab(expression(Chl:C~(mg^{"1"} ~ g^{"-1"}))) +
+  labs(x = "Age (d)") + 
+  geom_errorbar(aes(x = Chl_C_age_summer$age_d, 
+                    y = Chl_C_age_summer$Chl_C_avg*1000, 
+                    ymin =  Chl_C_age_summer$Chl_C_avg*1000 - Chl_C_age_summer$sd_Chl_C*1000, 
+                    ymax = Chl_C_age_summer$Chl_C_avg*1000 + Chl_C_age_summer$sd_Chl_C*1000), 
+                width = 0) +
+  geom_sigmoid(aes(y = Chl_C_age_spring$Chl_C_avg[Chl_C_age_spring$age_d==min(Chl_C_age_spring$age_d)]*1000, 
+                   yend = Chl_C_age_summer$Chl_C_avg[Chl_C_age_summer$age_d==max(Chl_C_age_summer$age_d)]*1000, 
+                   x = min(Chl_C_age_spring$age_d), 
+                   xend = 100), size = 1, shape = 16) +
+  geom_vline(xintercept = 50, linetype = "dashed", size = 0.5) +
+  ylab(expression(Chl:C~(mg^{"1"} ~ g^{"-1"}))) +
+  labs(x = "Age (d)") + 
+  scale_y_continuous(labels = label_number(accuracy = 1), 
+                     breaks = c(0,5,10,15,20), 
+                     limits = c(0,20)) +
+  scale_shape_manual(labels = c("Spring", "Summer"), values = c(19,17), guide = ) +
+  labs(color = "",
+       shape = "Season") +
+  coord_cartesian(expand = c(0,0)) +
+  scale_x_continuous(breaks = c(25,50,75,100), limits = c(10,100)) +
+  theme(panel.background = element_rect(fill = "white", 
+                                        color = "black", 
+                                        size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        legend.position = c(0.8,0.8),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) +
+   annotate("rect", xmin = 10, xmax = 50, ymin = 0, ymax = 20,
+           alpha = .25,fill = "#266A25")  +
+  annotate("rect", xmin = 50.1, xmax = 100, ymin = 0, ymax = 20,
+           alpha = .25,fill = "#BD9C3D") 
+
+  
+#b 
+
+MP_NPP_age_par <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(season %in% c("Spring", "Summer")) %>% 
+  filter(flag != 2) %>% 
+  ggplot(aes(y = NPP_umolC_g_hr, x = age_d)) +
+  geom_point(aes(color = PAR, shape = season), size = 7) +
+  ylab(expression(NPP~(µmolC ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  labs(color = "PAR",
+       x = "Age (d)",
+       shape = "") + 
+  scale_x_continuous(limits = c(10,90), breaks = c(25,50,75)) +
+  scale_y_continuous(limits = c(-50,300), breaks = c(0,100,200,300)) +
+  geom_hline(yintercept = 0, color = "black", size= 1, linetype = "dashed") +
+  theme(panel.background = element_rect(fill = "white", 
+                                        color = "black", 
+                                        size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        legend.key.height = unit(0.35, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) +
+  scale_shape_manual(values = c(19,17)) +
+  scale_color_viridis_b(breaks = c(0,50,100,250,500,1000,1500), limits = c(0,1500), name = expression(paste("PAR \n(µmol ",m^-2, s^-1,")"))) +
+  guides(shape = theme(legend.position = c(0.8,0.8)))
+
+
+figure1 <- plot_grid(Chl_C_age_cohorts, MP_NPP_age_par ,labels = c('a', 'b'), label_size = 24, label_fontfamily = "Times New Roman")
+
+ggsave("Figure1.tiff", plot = figure1, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 13, height = 6, device='tiff', dpi=250, units = "in")
+
+
+
+
+```
+
+
+
+#Figure 2: DOC vs NPP Mature and Age
+
+
+
+```{r}
+
+doc_NPP <- MP_DOC_NPP_phys_env_sum %>%
+  filter(flag != 2) %>% 
+  filter(season %in% c("Spring", "Summer")) %>% 
+  ggplot(aes(x = NPP_umolC_g_hr, y = DOC_umolC_g_hr)) +
+  geom_point(aes(color = age_d), size = 7) +
+ ylab(expression(DOC[ex]~(µmol~C ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  xlab(expression(NPP~(µmol~C ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  labs(color = "Age (d)") +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", size = 2) +
+  geom_abline(intercept = 0.82, slope = 0.023, size = 2) +
+  scico::scale_color_scico(palette = "vik", breaks = c(0,25,50,75,100)) +
+  scale_x_continuous(breaks = c(0,100,200,300), limits = c(-30,300)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.7, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) 
+
+
+doc_NPP_mature <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(season %in% c("Spring", "Summer")) %>% 
+  filter(flag != 2) %>% 
+  filter(age_d <= 50) %>% 
+  ggplot(aes(x = NPP_umolC_g_hr, y = DOC_umolC_g_hr, color = PAR)) +
+  geom_point(size = 7) +
+  ylab(expression(DOC[ex]~(µmol~C ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  xlab(expression(NPP~(µmol~C ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  labs(color = "PAR") + 
+  scale_y_continuous(labels = label_number(accuracy = 1), limits = c(0,10), breaks = c(0,5,10)) +
+  scale_x_continuous(limits = c(-50,300),breaks = c(0,100,200,300)) +
+   scale_color_viridis_b(breaks = c(0,50,100,250,500,1000,1500), limits = c(0,1500), name = expression(paste("PAR \n(µmol ",m^-2, s^-1,")"))) +
+  geom_abline(slope = 0.023, intercept = 0.82, size = 2) +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.7, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+
+figure2 <- plot_grid(doc_NPP_mature, doc_NPP,labels = c('a', 'b'), label_size = 24, label_fontfamily = "Times New Roman")
+
+ggsave("Figure2.tiff", plot = figure2, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 13, height = 6, device='tiff', dpi=250, units = "in")
+
+```
+
+
+# Figure 3
+
+```{r}
+
+
+# A
+
+fucose_manURA_age <- MP_DOM_Sugar %>% 
+  filter(season == "Summer") %>% 
+  select(age_d, Fucose, `Man-URA`, blade) %>% 
+  pivot_longer(cols = Fucose: `Man-URA`,
+               names_prefix = "sugar",
+               values_to = "mol_percent") %>% 
+  mutate(age_d = as.factor(age_d))
+  
+boxplot_fucose_manURA_summer <- fucose_manURA_age %>% 
+  ggplot(aes(x = age_d, y = mol_percent*100, fill = name)) +
+  geom_boxplot() +
+   ggtitle(label = "Summer") + 
+  labs(x = "Age (d)",
+       y = "Mole%",
+       fill = "") +
+  scale_fill_manual(values = c("#022E73", "#9D3709")) +
+  geom_point( position=position_dodge(width=0.75)) +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        plot.title = element_text(size = 20),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.1, "inch"),
+        legend.key.width = unit(0.1, "inch"),
+        legend.position = "none",
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+
+# C 
+
+fucose_manURA_age_spring <- MP_DOM_Sugar %>% 
+  filter(season == "Spring") %>% 
+  select(age_d, Fucose, `Man-URA`, blade) %>% 
+  pivot_longer(cols = Fucose: `Man-URA`,
+               names_prefix = "sugar",
+               values_to = "mol_percent") %>% 
+  mutate(age_d = as.factor(age_d))
+  
+boxplot_fucose_manURA_spring <- fucose_manURA_age_spring %>% 
+  ggplot(aes(x = age_d, y = mol_percent*100, fill = name)) +
+  geom_boxplot() +
+  labs(x = "Age (d)",
+       y = "Mole%",
+       fill = "") +
+  ggtitle(label = "Spring") + 
+  scale_fill_manual(values = c("#022E73", "#9D3709")) +
+  geom_point( position=position_dodge(width=0.75)) +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.position = c(0.8,0.885),
+        legend.text = element_text(size = 20),
+        plot.title = element_text(size = 20), 
+        legend.key.height = unit(0.2, "inch"),
+        legend.key.width = unit(0.2, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+
+
+figure3_part_one <- plot_grid(boxplot_fucose_manURA_summer, boxplot_fucose_manURA_spring,labels = c('c', 'd'), label_size = 24, label_fontfamily = "Times New Roman")
+
+
+supplemental_fig_4 <- plot_grid(boxplot_fucose_manURA_summer, boxplot_fucose_manURA_spring,labels = c('A', 'B'), label_size = 24, label_fontfamily = "Times New Roman")
+
+
+ggsave("supplemental_fig4.tiff", plot = supplemental_fig_4, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 15, height = 10, device='tiff', dpi=1000, units = "in")
+
+# C
+
+DOC_mean_by_age_season_blade <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(flag != 2 & season %in% c("Spring", "Summer")) %>% 
+  group_by(age_d, blade, season) %>% 
+  summarize(mean_DOC = mean(DOC_umolC_g_hr),
+            sd_DOC = sd(DOC_umolC_g_hr))
+
+DOC_Sugar <- merge(DOC_mean_by_age_season_blade, MP_DOM_Sugar, by = c("age_d", "blade", "season"))
+
+
+DOC_ManURA_p <- DOC_Sugar %>%
+  ggplot(aes(x = `Man-URA`*100, y = mean_DOC)) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = mean_DOC - sd_DOC, ymax = mean_DOC + sd_DOC), width = 0) +
+  ylab(expression(DOC[ex]~(µmol~C ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  labs(x = "Man-URA (mole%)") +
+  geom_abline(intercept = 1.57, slope = 44.481/100, linetype = "dashed", color = "black") +
+ theme(panel.background = element_rect(fill = "white", 
+                                        color = "black", 
+                                        size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+
+figure3_part_two <- plot_grid(figure3_part_one, DOC_ManURA_p,labels = c('', 'C'), label_size = 24, ncol = 1 ,label_fontfamily = "Times New Roman")
+
+
+ggsave("Figure3.tiff", plot = figure3_part_two, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 10, height = 15, device='tiff', dpi=1000, units = "in")
+
+```
+
+# Alternative figure 3
+
+```{r}
+
+#A
+
+pca_plot <- fviz_pca_biplot(sug.pca1, 
+                level = "var",
+                habillage = MP_DOM_Sugar[1:42,]$phase, 
+                addEllipses = TRUE, 
+                ellipse.level = 0.95,
+                label = "var", labelsize = 7,
+                col.var = "black",
+                repel = T,
+                geom="point", pointsize = 3,
+                palette = c("#022E73", "#9D3709")) +
+  labs(title = "", 
+       x = "PC1 (24%)",
+       y = "PC2 (24%)") +
+  scale_y_continuous(labels = label_number(accuracy = 1)) + 
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.position = c(0.2,0.1),
+        legend.title = element_blank(),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+
+# B
+
+DOC_mean_by_age_season_blade <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(flag != 2 & season %in% c("Spring", "Summer")) %>% 
+  group_by(age_d, blade, season) %>% 
+  summarize(mean_DOC = mean(DOC_umolC_g_hr),
+            sd_DOC = sd(DOC_umolC_g_hr))
+
+DOC_Sugar <- merge(DOC_mean_by_age_season_blade, MP_DOM_Sugar, by = c("age_d", "blade", "season"))
+
+
+DOC_ManURA_p <- DOC_Sugar %>%
+  ggplot(aes(x = `Man-URA`*100, y = mean_DOC)) +
+   geom_abline(intercept = -6.22, slope = 89.67/100, linetype = "solid", size = 2,color = "black") +
+  geom_point(size = 5) +
+  geom_errorbar(aes(ymin = mean_DOC - sd_DOC, ymax = mean_DOC + sd_DOC), width = 0) +
+ ylab(expression(DOC[ex]~(µmol~C ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  labs(x = "Man-URA (mole%)") +
+ theme(panel.background = element_rect(fill = "white", 
+                                        color = "black", 
+                                        size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+
+figure3_alt <- plot_grid(pca_plot, DOC_ManURA_p,labels = c('a', 'b'), label_size = 24 ,label_fontfamily = "Times New Roman")
+
+
+figure3_complete <- plot_grid(figure3_alt,figure3_part_one, ncol = 1,label_size = 24 ,label_fontfamily = "Times New Roman")
+
+ggsave("figure3_alt.tiff", plot = figure3_alt, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 15, height = 8, device='tiff', dpi=500, units = "in")
+
+
+ggsave("figure3_complete.tiff", plot = figure3_complete, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 15, height = 15, device='tiff', dpi=250, units = "in")
+
+```
+
+# Table 1
+
+
+```{r}
+
+table_1_sum <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(flag != 2 & season %in% c("Spring", "Summer")) %>% 
+  group_by(season, date, age_d) %>% 
+  summarize(n = 6, 
+    blade = blade,
+    lightlevel_timepoint = lightlevel_timepoint,
+    mean_CN = round(mean(C_N),1),
+    sd_CN = round(sd(C_N),1),
+    min_PAR = round(min(PAR),0),
+    max_PAR = round(max(PAR),0),
+    mean_ChlC = round(mean(Chl_C*1000),1),
+    sd_ChlC = round(sd(Chl_C *1000),1),
+    min_DOC = round(min(DOC_umolC_g_hr),1),
+    max_DOC = round(max(DOC_umolC_g_hr),1),
+    min_NPP = round(min(NPP_umolC_g_hr),1),
+    max_NPP = round(max(NPP_umolC_g_hr),1)
+  ) %>% 
+  filter(blade == 1 & lightlevel_timepoint == 1) %>% 
+  select(-c(blade, lightlevel_timepoint)) %>% 
+  mutate(CN = paste(mean_CN, sd_CN, sep = " ± "),
+         ChlC = paste(mean_ChlC, sd_ChlC, sep = " ± "),
+        PAR_range = paste(min_PAR, max_PAR, sep = " - "),
+         NPP_range = paste(min_NPP, max_NPP, sep = " - "),
+        DOC_range = paste(min_DOC, max_DOC, sep = " - ")) %>% 
+  select(-c(min_DOC, max_DOC, 
+            min_NPP, max_NPP, 
+            min_PAR, max_PAR, 
+            mean_CN, sd_CN, 
+            mean_ChlC, sd_ChlC)) %>% 
+  arrange(season, age_d)
+
+table_1_sum
+
+
+write_excel_csv(table_1_sum, "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Data/table_1_sum.csv")
+
+table_1 <- kableExtra::kbl(table_1_sum,
+                booktabs = TRUE,
+                col.names = c("Season", 
+                              "Date",
+                              "Age (d)",
+                              "N",
+                              "Blade C:N",
+                              "Blade Chl:C",
+                              "$PAR~(µmol~m^{2}~s^{-1})$",
+                              "$NPP~(µmolC~g_{DW}^{-1}~hr^{-1})$",
+                              "$DOC~(µmolC~g_{DW}^{-1}~hr^{-1})$")) %>% 
+  kable_classic(html_font = "Times New Roman",
+                  full_width = F) %>% 
+  kable_styling(font_size = 20) %>% 
+  save_kable("table1.png")
+
+table1 <- plot_grid(table_1,labels = c(""), label_size = 24 ,label_fontfamily = "Times New Roman")
+
+ggsave("table1.tiff", plot = table_1, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 15, height = 10, device='tiff', dpi=1000, units = "in")
+
+
+
+
+```
+# Supplemental Figure: Solubilization Rates
+
+```{r}
+
+
+figure4 <- solubilization_rates %>% 
+  ungroup() %>% 
+  mutate(predicted_solub_rate = predict(solub_chlC_lm, solubilization_rates)) %>% 
+  ggplot(aes(x = Chl_C, y = daily_solubilization)) +
+  geom_point(size = 5) +
+  xlab(expression(Chl:C~(mg^{"1"} ~ g^{"-1"}))) +
+  ylab(expression(Solubilization~Rate~("%"~d^{"-1"}))) +
+  scale_x_continuous(breaks = c(0,2,4,6,8,10,12)) +
+  scale_y_continuous(breaks = c(0,2,4,6,8,10)) +
+  geom_smooth(method = "lm", formula = (y ~ exp(-x)), se = FALSE, color = "black") +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 24),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+
+ggsave("figure4.tiff", plot = figure4, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 6, height = 6, device='tiff', dpi=1000, units = "in")
+
+
+
+```
+
+
+# Senescent Biomass Proportion
+
+```{r}
+
+percent_senescent <- biomass_phys %>%  
+  ggplot(aes(x = month_name,
+             y = percent_senescent)) +
+  geom_point(size = 4) +
+  labs(y = "Senescent Biomass (% Total)",
+       x = "") +
+  scale_y_continuous(breaks = c(0,25,50,75,100), limits = c(0,100)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) 
+
+ggsave("senescent_biomass.tiff", plot = percent_senescent, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 8, height = 6, device='tiff', dpi=500, units = "in")
+
+```
+
+
+# Figure 5A: CA Kelp Biomass Map
+
+```{r}
+ca_kelp_biomass <- ggplot() + 
+  coord_quickmap() + 
+  geom_polygon(data = ca_df, 
+               mapping = aes(x = long, 
+                             y = lat, 
+                             group = group), 
+               color = "black", 
+               fill = "gray") +
+  geom_point(data = avg_biomass_lat_long, 
+             aes(x = long, 
+                 y = lat, 
+                 color = avg_biomass_kg_ww/100000), 
+             size = 2,
+             position = position_jitter(width = 0.1, height = 0.025)) +
+  scale_color_gradient2(midpoint = mid/100000, 
+                        low = "yellow", 
+                        mid = "darkgreen",
+                        high = "olivedrab4", 
+                        space = "Lab", 
+                        name = expression(paste("Biomass (","10"^5," kg)")),
+                        breaks = c(0, 0.1, 1, 10, 20),
+                        trans = "log10") +
+  labs(x = "Longitude (ºW)",
+       y = "Latitude (ºN)") +
+   theme(panel.background = element_rect(fill = "white", 
+                                         color = "black", 
+                                         size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.4, "inch"),
+        legend.key.width = unit(0.3, "inch"),
+        legend.position = "top",
+        legend.title = element_text(size = 24),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+ggsave("giant_kelp_biomass_CA.tiff", plot = ca_kelp_biomass, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 6, height = 8, device='tiff', dpi=500, units = "in")
+
+
+
+```
+
+# Figure 5B : Annual DOC Production 
+
+```{r}
+
+doc_production_first_look <- monthly_DOC_production %>% 
+  group_by(year) %>% 
+  summarize(biomass_C = sum(total_biomass/1000/1000*0.3),
+            DOC_annual_no_senescence = sum(DOC_production_all_mature),
+            DOC_annual_no_senescence_025 = sum(DOC_production_all_mature_025),
+            DOC_annual_no_senescence_975 = sum(DOC_production_all_mature_975),
+            DOC_annual_w_senescence = sum(DOC_production_mature_senescent),
+            DOC_annual_w_senescence_025 = sum(DOC_production_mature_senescent_025),
+            DOC_annual_w_senescence_975 = sum(DOC_production_mature_senescent_975)) %>% 
+  ggplot() +
+  geom_line(aes(x = year, y = DOC_annual_no_senescence),
+            color ="#266A25",
+            size = 3) +
+  geom_line(aes(x = year, y = DOC_annual_no_senescence_025),
+            color ="#266A25",
+            size = 1.5,
+            linetype = "dotted") +
+  geom_line(aes(x = year, y = DOC_annual_no_senescence_975),
+            color ="#266A25",
+            size = 1.5,
+            linetype = "dotted") +
+  geom_line(aes(x = year, y = DOC_annual_w_senescence), 
+            color = "#BD9C3D",
+            size = 3) +
+  geom_line(aes(x = year, y = DOC_annual_w_senescence_025), 
+            color = "#BD9C3D",
+            size = 1.5,
+            linetype = "dotted") +
+  geom_line(aes(x = year, y = DOC_annual_w_senescence_975), 
+            color = "#BD9C3D",
+            size = 1.5,
+            linetype = "dotted") +
+  labs(x = "") +
+  annotate(geom="text", 
+           x=2018, 
+           y=14, 
+           label="+Senescence",
+           color= "#BD9C3D",
+           font = "Times",
+           size = 10) +
+   annotate(geom="text", 
+            x=2018, 
+            y=13, 
+            label="-Senescence",
+            color= "#266A25",
+            font = "Times",
+            size = 10) +
+  ylab(expression(DOC~Production~(Gg~C ~ yr^{-1})))+
+  scale_x_continuous(expand = c(0,0), breaks = c(2000,2005,2010,2015,2020)) +
+  scale_y_continuous(breaks = c(0,5,10,15), limits = c(0,15), expand = c(0,0)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 24),
+        axis.text.x = element_text(size = 24, color = "black"),
+        axis.text.y = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 25),
+        text = element_text(family = "Times")) 
+
+
+ggsave("giant_kelp_annual_DOC.tiff", plot = doc_production_first_look, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 8, height = 8, device='tiff', dpi=500, units = "in")
+
+
+```
+
+# Figure 5
+
+```{r}
+
+figure5 <- plot_grid(ca_kelp_biomass,doc_production_first_look, labels = c('a', 'b'), label_size = 24, label_fontfamily = "Times New Roman")
+
+ggsave("figure5.tiff", plot = figure5, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 15, height = 8, device='tiff', dpi=250, units = "in")
+
+
+```
+
+
+# Figure 4: Total Biomass and Fraction that is Senescent 
+
+
+```{r}
+library(viridis)
+
+percent_senescent <- biomass_phys %>%  
+  ggplot(aes(x = month_name,
+             y = percent_senescent,
+             group = year,
+             color = year)) +
+  geom_point(aes(color = year),size = 4) +
+  labs(y = "Senescent Biomass (% Total)",
+       x = "") +
+  scale_color_viridis(discrete = FALSE) +
+  scale_y_continuous(breaks = c(0,25,50,75,100), limits = c(0,100)) +
+  geom_line(aes(x = month_name, y = percent_senescent), orientation = "x") +
+  labs(color = "Year") +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text.x = element_text(angle = 45, vjust = 0.6, size = 24, color = "black"),
+        axis.text.y = element_text(size = 20),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) 
+
+total_biomass <- biomass_phys %>%  
+  ggplot(aes(x = month_name,
+             y = total_biomass/1000/1000,
+             group = year,
+             color = year)) +
+  geom_point(size = 4) +
+  geom_line(aes(x = month_name, y = total_biomass/1000/1000),
+            orientation = "x") +
+  labs(y = "Canopy Biomass (Gg WW)",
+       x = "") +
+  scale_color_viridis(discrete = FALSE) +
+  scale_y_continuous(breaks = c(0,100,200,300,400), limits = c(0,400)) +
+  labs(color = "Year") +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 20),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+  
+
+
+  
+
+monthyl_biomass_percent_senescent_figure <- plot_grid(total_biomass,percent_senescent,labels = c('a', 'b'), ncol = 1 ,label_size = 24, align = "v",rel_heights = c(1,1), axis = "lr",label_fontfamily = "Times New Roman")
+
+ggsave("monthyl_biomass_percent_senescent_figure.tiff", plot = monthyl_biomass_percent_senescent_figure, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 10, height = 15, device='tiff', dpi=250, units = "in")
+
+
+```
+
+
+# Annual DOC Production: with and without senescence 
+
+```{r}
+
+annual_DOC_production_boxplot <- annual_DOC_production %>% 
+  ggplot() +
+  geom_boxplot(aes(y = annual_DOC_production, x = senescence, fill = senescence)) +
+   geom_point(aes(x = senescence, y = annual_DOC_production, color = senescence),
+             position = position_jitterdodge()) +
+  ylab(expression(DOC~Production~(Gg~C ~ yr^{-1})))+
+  labs(x = "",
+       fill = "") +
+  scale_y_continuous(breaks = c(0,2,4,6,8,10,12,14)) +
+  scale_fill_manual(values = c("#266A25","#BD9C3D")) +
+  scale_color_manual(values = c("darkgreen","darkgoldenrod")) +
+  theme(panel.background = element_rect(fill = "white", 
+                                        color = "black", 
+                                        size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.position = "none",
+        legend.text = element_text(size = 15),
+        legend.title = element_blank(),
+        axis.text.y = element_text(size = 20, 
+                                 color = "black"),
+        axis.text.x = element_text(size = 24, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+CA_kelp_biomass_DOC_production <- plot_grid(ca_kelp_biomass,annual_DOC_production_boxplot,labels = c('A', 'B'),label_size = 24, label_fontfamily = "Times New Roman")
+
+ggsave("CA_kelp_biomass_DOC_production.tiff", plot = CA_kelp_biomass_DOC_production, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 15, height = 10, device='tiff', dpi=500, units = "in")
+
+
+```
+
+# Supplemental Figure 1 
+
+```{r}
+#A 
+
+NPP_par <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(season %in% c("Spring", "Summer")) %>% 
+  filter(flag != 2) %>% 
+  group_by(age_d, season, lightlevel_timepoint) %>% 
+  mutate(mean_PAR = mean(PAR),
+         mean_NPP = mean(NPP_umolC_g_hr),
+         sd_PAR = sd(PAR),
+         sd_NPP = sd(NPP_umolC_g_hr)) %>% 
+  ggplot(aes(y = mean_NPP, x = mean_PAR, group = interaction(age_d, season))) +
+  labs(color = "Age (d)") +
+  geom_point(aes(shape = season, color = age_d), size = 7) +
+  geom_line(aes(color = age_d), size = 1) +
+  geom_errorbar(aes(xmin = mean_PAR - sd_PAR, xmax = mean_PAR + sd_PAR, ymin = mean_NPP - sd_NPP, ymax = mean_NPP + sd_NPP), width = 0, alpha = 0.1) +
+  scale_shape_manual(values = c(19,17), guide = "none") +
+  scico::scale_color_scico(palette = "vik", breaks = c(0,25,50,75,100)) +
+  ylab(expression(NPP~(µmolC ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  xlab(expression(paste("PAR (µmol ",m^-2, s^-1,")"))) +
+  scale_x_continuous(limits = c(0,1550), breaks = c(0,300,600,900,1200,1600)) +
+  scale_y_continuous(limits = c(-50,300), breaks = c(0,100,200,300)) +
+  geom_hline(yintercept = 0, color = "black", size= 1, linetype = "dashed") +
+  theme(panel.background = element_rect(fill = "white", 
+                                        color = "black", 
+                                        size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        legend.key.height = unit(0.7, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) #
+  scale_color_viridis_b(breaks = c(0,50,100,250,500,1000,1500), limits = c(0,1500))
+
+
+# B
+  
+MP_Pmax_Age_p <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(season %in% c("Spring", "Summer")) %>% 
+  filter(flag != 2) %>% 
+  filter(lightlevel_timepoint %in% c(5,6)) %>% 
+  select(age_d, NPP_umolC_g_hr, season) %>% 
+  ggplot(aes(y = NPP_umolC_g_hr, x = age_d)) +
+  geom_point(aes(shape = season, color = season), size = 7) +
+  ylab(expression(P[max]~(µmolC ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  labs(color = "",
+       x = "Age (d)",
+       shape = "") +
+  scale_color_manual(values = c("red", "black"), guide = "none") +
+  geom_abline(slope = -3.22, intercept = 260.73, size = 2, color = "black") +
+  geom_abline(slope = -1.34, intercept = 176.64, size = 2, color = "red") +
+  scale_x_continuous(limits = c(10,80), breaks = c(0,25,50,75)) +
+  scale_y_continuous(limits = c(-50,300), breaks = c(0,100,200,300)) +
+  geom_hline(yintercept = 0, color = "black", size= 1, linetype = "dashed") +
+  theme(panel.background = element_rect(fill = "white", 
+                                        color = "black", 
+                                        size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        legend.key.height = unit(0.7, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) +
+  scale_shape_manual(values = c(19,17))
+
+
+supp_figure_1 <- plot_grid(NPP_par, MP_Pmax_Age_p ,labels = c('a', 'b'), label_size = 24, label_fontfamily = "Times New Roman")
+
+ggsave("supp_figure_1.tiff", plot = supp_figure_1, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 16, height = 6, device='tiff', dpi=250, units = "in")
+
+
+```
+
+
+# Supplemental Figure 3
+
+```{r}
+
+
+PER_C_N <-  MP_DOC_NPP_phys_env_sum %>% 
+  filter(flag != 2, season %in% c("Spring", "Summer")) %>% 
+  select(age_d, season, PAR,DOC_umolC_g_hr,NPP_umolC_g_hr, C_N, Chl_C, chlA_nmol_g) %>% 
+  filter(PAR > 0) %>% 
+  filter(age_d < 50) %>% 
+  mutate(PER = DOC_umolC_g_hr/NPP_umolC_g_hr *100) %>% 
+  filter(NPP_umolC_g_hr > 0) %>% 
+  ggplot(aes(x = C_N, y = PER)) +
+  geom_point(size = 4) +
+  labs(y = "Percent Extracellular Release (%)",
+       x = "Tissue C:N") + 
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+PER_PAR <-  MP_DOC_NPP_phys_env_sum %>% 
+  filter(flag != 2, season %in% c("Spring", "Summer")) %>% 
+  select(age_d, season, PAR,DOC_umolC_g_hr,NPP_umolC_g_hr, C_N, Chl_C, chlA_nmol_g) %>% 
+  filter(PAR > 0) %>% 
+  filter(age_d < 50) %>% 
+  mutate(PER = DOC_umolC_g_hr/NPP_umolC_g_hr *100) %>% 
+  filter(NPP_umolC_g_hr > 0) %>% 
+  ggplot(aes(x = PAR, y = PER)) +
+  geom_point(size = 4) +
+  labs(y = "Percent Extracellular Release (%)",
+       x = expression(paste("PAR (µmol ",m^-2, s^-1,")"))) + 
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+
+supp_figure_3 <- plot_grid(PER_C_N, PER_PAR ,labels = c('a', 'b'), label_size = 24, label_fontfamily = "Times New Roman")
+
+ggsave("supp_figure_3.tiff", plot = supp_figure_3, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 13, height = 6, device='tiff', dpi=250, units = "in")
+
+```
+
+
+#Supplemental Figure 2: DOC vs NPP Mature and Age
+
+
+
+```{r}
+
+
+MP_DOC_NPP_phys_env_sum <- MP_DOC_NPP_phys_env_sum %>% 
+  mutate(flag = as.character(flag))
+
+
+doc_NPP_supp2 <- MP_DOC_NPP_phys_env_sum %>%
+  filter(season %in% c("Spring", "Summer")) %>% 
+  ggplot(aes(x = NPP_umolC_g_hr, y = DOC_umolC_g_hr)) +
+  geom_point(aes(color = age_d, shape = flag), size = 7) +
+ ylab(expression(DOC[ex]~(µmol~C ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  xlab(expression(NPP~(µmol~C ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  labs(color = "Age (d)") +
+  scale_shape_discrete(guide = "none") +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", size = 2) +
+  geom_abline(intercept = 0.82, slope = 0.023, size = 2) +
+  scico::scale_color_scico(palette = "vik", breaks = c(0,25,50,75,100)) +
+  scale_x_continuous(breaks = c(-200,-100,0,100,200,300), limits = c(-200,300)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.7, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) 
+
+
+doc_NPP_mature_supp2 <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(season %in% c("Spring", "Summer")) %>% 
+  filter(age_d <= 50) %>% 
+  ggplot(aes(x = NPP_umolC_g_hr, y = DOC_umolC_g_hr, color = PAR)) +
+  geom_point(aes(shape = flag),size = 7) +
+  ylab(expression(DOC[ex]~(µmol~C ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  xlab(expression(NPP~(µmol~C ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  labs(color = "PAR") + 
+  scale_shape_discrete(guide = "none") +
+  scale_y_continuous(labels = label_number(accuracy = 1), limits = c(0,40), breaks = c(0,5,10,20,30,40)) +
+  scale_x_continuous(limits = c(-50,300),breaks = c(0,100,200,300)) +
+   scale_color_viridis_b(breaks = c(0,50,100,250,500,1000,1500), limits = c(0,1500), name = expression(paste("PAR \n(µmol ",m^-2, s^-1,")"))) +
+  geom_abline(slope = 0.023, intercept = 0.82, size = 2) +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.7, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+
+supp3 <- plot_grid(doc_NPP_mature_supp2, label_size = 24, label_fontfamily = "Times New Roman")
+
+ggsave("supp3.tiff", plot = supp3, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 7, height = 6, device='tiff', dpi=250, units = "in")
+
+```
+
+
+# Supplemental Figure 4 
+
+```{r}
+
+senescent_kelp <- MP_DOC_NPP_phys_env_sum %>% 
+  group_by(season) %>%
+  filter(flag != 2) %>% 
+  summarise(norm_chlA = (chlA_nmol_g/mean(chlA_nmol_g[age_d == min(age_d)]))*100,
+            DOC_umolC_g_hr = DOC_umolC_g_hr,
+            age_d = age_d,
+            PAR = PAR,
+            NPP_umolC_g_hr = NPP_umolC_g_hr,
+            tissue_C_percent = tissue_C_percent,
+            dry_mass_g = dry_mass_g,
+            Chl_C = Chl_C,
+            blade = blade) %>% 
+  filter(age_d > 50)
+
+
+lm2_DOCex_normChlA <- lmodel2(data = senescent_kelp, DOC_umolC_g_hr~norm_chlA)
+
+lm2_DOCex_normChlA
+
+DOC_normCHLA_p <- senescent_kelp %>% 
+  ggplot(aes(x = norm_chlA, y = DOC_umolC_g_hr)) +
+   geom_point(size = 5, aes(color = age_d)) + 
+  geom_abline(intercept = 33.4, slope = -0.42, color = "black", size = 2) +
+   scico::scale_color_scico(palette = "vik", breaks = c(50,60,70,80), limits = c(50,80)) +
+  labs(x = "Normalized Chl (% Initial)",
+       color = "Age (d)") +
+  scale_x_continuous(breaks = c(0,25,50,75,100), limits = c(0,100)) +
+  ylab(expression(DOC~Production~(µmolC ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 24),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 30, color = "black"),
+        axis.title = element_text(size = 30),
+        text = element_text(family = "Times"))
+
+
+ggsave("supp4.tiff", plot = DOC_normCHLA_p, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 8, height = 7, device='tiff', dpi=250, units = "in")
+
+```
+
+# Supplemental Figure: Mohawk Reef CN
+
+```{r}
+
+MK_CN_summary <- kelp_C_N_lter_MK %>% 
+  group_by(month) %>% 
+  summarize(mean_C_N = mean(CN_RATIO), se_c_n = (sd(CN_RATIO)/sqrt(length(CN_RATIO))))
+
+
+MK_CN <- ggplot() +
+  geom_point(aes(x = kelp_C_N_lter_MK$month, 
+                 y = kelp_C_N_lter_MK$CN_RATIO),
+             size = 5) +
+  geom_point(aes(x = MK_CN_summary$month, 
+                 y = MK_CN_summary$mean_C_N), 
+             color = "red", 
+             size = 10) +
+  geom_line(aes(x = MK_CN_summary$month, 
+                 y = MK_CN_summary$mean_C_N), 
+             color = "red", 
+             size = 5) +
+  labs(y = "Carbon:Nitrogen",
+       x = "") + 
+  geom_smooth() +
+  scale_y_continuous(limits = c(5,40), breaks = c(5,10,15,20,25,30,35,40)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.title = element_blank(),
+        plot.title = element_text(face = "italic", size = 15),
+        legend.text = element_text(size = 15),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Times"))
+
+
+ggsave("MK_CN.tiff", plot = MK_CN, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 8, height = 7, device='tiff', dpi=250, units = "in")
+
+
+
+
+```
+
+# Supplemental Figure: DOC vs PAR
+
+```{r}
+
+doc_PAR_mature <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(age_d < 50,
+         flag != 2) %>% 
+  filter(season %in% c("Summer", "Spring")) %>% 
+  ggplot(aes(x = PAR, y = DOC_umolC_g_hr)) +
+  geom_point(size = 7) +
+  ylab(expression(DOC[ex]~(µmolC ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  xlab(expression(paste("PAR (µmol ",m^-2, s^-1,")"))) +
+  labs(color = "PAR") + 
+  scale_y_continuous(labels = label_number(accuracy = 1), limits = c(0,10), breaks = c(0,5,10,15,20)) +
+  geom_abline(slope = 0.0028, intercept = 2.28, size = 2) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 24),
+        axis.text = element_text(size = 30, color = "black"),
+        axis.title = element_text(size = 25),
+        text = element_text(family = "Times"))
+
+doc_NPP_mature <- MP_DOC_NPP_phys_env_sum %>% 
+  filter(season %in% c("Spring", "Summer")) %>% 
+  filter(flag != 2) %>% 
+  filter(age_d <= 50) %>% 
+  ggplot(aes(x = NPP_umolC_g_hr, y = DOC_umolC_g_hr, color = PAR)) +
+  geom_point(size = 7) +
+  ylab(expression(DOC[ex]~(µmol~C ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  xlab(expression(NPP~(µmol~C ~ g[DW]^{"-1"} ~ hr^{"-1"}))) +
+  labs(color = "PAR") + 
+  scale_y_continuous(labels = label_number(accuracy = 1), limits = c(0,10), breaks = c(0,5,10)) +
+  scale_x_continuous(limits = c(-50,300),breaks = c(0,100,200,300)) +
+   scale_color_viridis_b(breaks = c(0,50,100,250,500,1000,1500), limits = c(0,1500), name = expression(paste("PAR \n(µmol ",m^-2, s^-1,")"))) +
+  geom_abline(slope = 0.023, intercept = 0.82, size = 2) +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.7, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+
+supplemental_figure_DOC_PAR <- plot_grid(doc_NPP_mature, doc_PAR_mature ,labels = c('A', 'B'), label_size = 24, label_fontfamily = "Times New Roman")
+
+ggsave("supplemental_figure_DOC_PAR.tiff", plot = supplemental_figure_DOC_PAR, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 15, height = 7, device='tiff', dpi=500, units = "in")
+
+```
+
+
+# DOC production vs. biomass 
+
+```{r}
+
+monthyl_DOC_production_vs_biomass_plot <- monthly_DOC_production %>%  
+  ggplot() +
+  geom_point(aes(x = total_biomass/1000/1000,
+             y = DOC_production_mature_senescent),
+             size = 4) +
+  labs(x = "Total Biomass (Gg Wet Weight)") +
+  geom_abline(intercept = 0.03, slope = 7.45e-03, color = "black", size = 2) +
+  ylab(expression(DOC~Production~(Gg~C ~ month^{-1})))+
+  scale_y_continuous(breaks = c(0,1,2,3), limits = c(0,3)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) 
+
+
+
+
+ggsave("monthyl_DOC_production_vs_biomass_plot.tiff", plot = monthyl_DOC_production_vs_biomass_plot, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 8, height = 6, device='tiff', dpi=500, units = "in")
+
+
+
+
+```
+
+# Supplemental Figure 

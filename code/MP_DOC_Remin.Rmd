@@ -12,7 +12,7 @@ knitr::opts_chunk$set(echo = TRUE, message = F, echo = F, warning = F)
 ```{r}
 
 
-setwd("/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/MP Exudate Sampling/data/Compiled Data/")
+
 
 library(tidyverse)
 library(lmodel2)
@@ -22,6 +22,7 @@ library(kableExtra)
 library(scales)
 library(factoextra)
 library(mgcv)
+library(here)
 library(janitor)
 library(broom)
 library(rstatix)
@@ -36,8 +37,7 @@ library(ggbump)
 
 ```{r}
 
-DOM_remin <- read_xlsx("DOM_remineralization.xlsx") %>% 
-  mutate(blade = as.character(blade))
+DOM_remin <- read_csv(here("data", "DOM_remineralization.csv"))
 
 
 
@@ -86,10 +86,24 @@ DOM_amendment_bioavailability_metadata <- merge(DOM_remin_amended_metadata, DOM_
   select(-c(timepoint.x, timepoint.y, DOC_norm, DOC_norm_sd))
 
 
+
+
 ```
 
 
 
+# Mean Recalcitrnace 
+
+```{r}
+
+
+DOM_amendment_bioavailability_metadata %>% 
+  summarize(mean_recalc = mean(recalcitrant_percent),
+            sd_recalc = sd(recalcitrant_percent))
+
+
+
+```
 
 
 
@@ -149,6 +163,7 @@ DOM_remin_plot <- DOM_remin %>%
 
 DOM_remin %>% 
   filter(DOC_uMC != "NA") %>% 
+  mutate(age_d = as.factor(age_d)) %>% 
   group_by(kelp_collection_date, timepoint, age_d) %>% 
   summarise(blade = blade,
             days = days,
@@ -168,7 +183,7 @@ DOM_remin %>%
   geom_point(aes(color = age_d), size = 6) +
   geom_errorbar(aes(ymin = DOC_norm_avg - DOC_norm_sd, 
                     ymax = DOC_norm_avg + DOC_norm_sd,
-                    width = 0)) +
+                    color = age_d)) +
   labs(x = "Days",
        y = "DOC (% Initial)") +
   scale_x_continuous(limits = c(0,100)) +

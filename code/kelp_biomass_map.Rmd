@@ -10,10 +10,8 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE, message = F, echo = F, warning = F)
 ```
 
-```{r}
+```{r,include=FALSE, echo=F, warning=F, message=F}
 
-
-setwd("/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/MP Exudate Sampling/data/Compiled Data/")
 
 library(tidyverse)
 library(lmodel2)
@@ -33,6 +31,7 @@ library(maps)
 library(mapdata)
 library(ggmap)
 library(reshape2)
+library(here)
 
 ```
 
@@ -62,9 +61,9 @@ ca_base <- ggplot(data = ca_df, mapping = aes(x = long, y = lat, group = group))
 ```{r}
 
 
-annual_kelp_biomass <- read_xlsx("kelp_no3_waves_annual_long.xlsx")
+annual_kelp_biomass <- read_csv(here("Data","kelp_no3_waves_annual_long.csv"))
 
-kelp_biomass_lat_long <- read_xlsx("locations.xlsx")
+kelp_biomass_lat_long <- read_csv(here("Data","locations.csv"))
 
 
 
@@ -83,7 +82,7 @@ site_avg_annual_kelp_biomass <- annual_kelp_biomass %>%
 
 annual_biomass_total <- annual_kelp_biomass %>% 
   group_by(year) %>% 
-  summarise(total_biomass = sum(kelp)/1000/1000*0.11*0.32*1.77) %>% 
+  summarise(total_biomass = sum(kelp)) %>% 
   ungroup()
 
 min(annual_biomass_total$total_biomass)
@@ -105,7 +104,7 @@ avg_biomass_lat_long <- avg_biomass_lat_long %>%
   mutate(long = lon,
          lat = lat)
 
-total_avg_biomass <- sum(avg_biomass_lat_long$avg_biomass_kg_ww)/1000/1000*0.13 
+total_avg_biomass <- sum(avg_biomass_lat_long$avg_biomass_kg_ww) 
 
 ```
 
@@ -129,11 +128,12 @@ ca_kelp_biomass <- ggplot() +
              aes(x = long, 
                  y = lat, 
                  color = avg_biomass_kg_ww/100000), 
-             size = 4,
-             position = position_jitter(width = 0.1, height = 0.1)) +
+             size = 2,
+             position = position_jitter(width = 0.1, height = 0.025)) +
+  geom_point(aes(x = -119.7299, y = 34.3934), shape= 13, size = 10, fill = "red") +
   scale_color_gradient2(midpoint = mid/100000, 
                         low = "yellow", 
-                        mid = "yellow3",
+                        mid = "darkgreen",
                         high = "olivedrab4", 
                         space = "Lab", 
                         name = expression(paste("Biomass (","10"^5," kg)")),
@@ -152,17 +152,158 @@ ca_kelp_biomass <- ggplot() +
         legend.key = element_rect(fill = "white"),
         legend.text = element_text(size = 20),
         legend.key.height = unit(0.4, "inch"),
-        legend.key.width = unit(0.6, "inch"),
+        legend.key.width = unit(0.3, "inch"),
         legend.position = "top",
-        legend.title = element_text(size = 25),
+        legend.title = element_text(size = 24),
         axis.text = element_text(size = 20, 
                                  color = "black"),
-        axis.title = element_text(size = 25),
+        axis.title = element_text(size = 24),
         text = element_text(family = "Times"))
 
   
 
- ggsave(file="ca_kelp_biomass.svg", plot= ca_kelp_biomass, width=10, height=10)
+ggsave(file="ca_kelp_biomass.png", plot= ca_kelp_biomass, width=10, height=10)
+
+
+
+```
+
+
+# LTER Mohawk CN and NUTS
+
+# Giant Kelp Stoichiometry 
+
+```{r}
+
+kelp_C_N_lter <- read_csv(here("Data", "CHN_Field_all_years_20211006.csv"))
+
+kelp_C_N_lter[kelp_C_N_lter == -99999.00] <- NA
+
+kelp_C_N_lter_MK <- kelp_C_N_lter %>% 
+  mutate(month = case_when(
+    MONTH == 1 ~ "Jan",
+    MONTH == 2 ~ "Feb",
+    MONTH == 3 ~ "Mar",
+    MONTH == 4 ~ "Apr",
+    MONTH == 5 ~ "May",
+    MONTH == 6 ~ "Jun",
+    MONTH == 7 ~ "Jul",
+    MONTH == 8 ~ "Aug",
+    MONTH == 9 ~ "Sep",
+    MONTH == 10 ~ "Oct",
+    MONTH == 11 ~ "Nov",
+    MONTH == 12 ~ "Dec"),
+    molC = C/12, molN = N/14, c_n_molar = molC/molN) %>% 
+  filter(c_n_molar != "NA") %>% 
+  mutate(c_n_molar = as.numeric(c_n_molar)) %>% 
+  filter(c_n_molar < 300) %>% 
+  filter(SITE == "MOHK")
+
+kelp_C_N_lter_MK$month <- factor(kelp_C_N_lter_MK$month, levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))
+
+MK_CN <- kelp_C_N_lter_MK %>% 
+  group_by(month) %>% 
+  summarize(mean_C_N = mean(CN_RATIO), se_c_n = (sd(CN_RATIO)/sqrt(length(CN_RATIO)))) %>% 
+  ggplot(aes(x = month, y = mean_C_N)) +
+  geom_point(size = 5) +
+  geom_line() +
+  geom_errorbar(aes(ymin = mean_C_N - se_c_n, ymax = mean_C_N + se_c_n), width = 0, alpha = 0.5) +
+  labs(y = "Carbon:Nitrogen",
+       x = "") + 
+  scale_y_continuous(limits = c(10,25), breaks = c(10,15,20,25,30)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.title = element_blank(),
+        plot.title = element_text(face = "italic", size = 15),
+        legend.text = element_text(size = 15),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Times"))
+
+
+
+```
+
+# Monthyl Nutrients 
+
+```{r}
+
+lter_bottle_monthly <- read_xlsx(here("data","SBC_LTER_Monthly_Bottle_Data.xlsx"))
+
+lter_bottle_monthly[lter_bottle_monthly == 99999.000] <- NA
+
+lter_bottle_monthly$`NO2+NO3 (umol/l)`[lter_bottle_monthly$`NO2+NO3 (umol/l)` == "BDL"] <- 0
+
+lter_bottle_monthly_nuts <- lter_bottle_monthly %>% 
+  mutate(`yyyy-mm-dd` = as.Date(`yyyy-mm-dd`,format = "%yyyy-%mm-%dd")) %>% 
+  mutate(month_name = as.character(format(as.Date(`yyyy-mm-dd`),"%b"))) %>% 
+  filter(`NO2+NO3 (umol/l)` != "NA") %>% 
+  filter(`Target Depth (m)` == 1) %>% 
+# %>% 
+  select(month_name, `NO2+NO3 (umol/l)`)
+
+
+lter_bottle_monthly_nuts <- lter_bottle_monthly_nuts %>% 
+  mutate(`NO2+NO3 (umol/l)` = as.numeric(`NO2+NO3 (umol/l)`))
+
+lter_bottle_monthly_nuts$month_name <- factor(lter_bottle_monthly_nuts$month_name, levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))
+
+nuts_p <- lter_bottle_monthly_nuts %>% 
+  filter(month_name != "NA") %>% 
+  group_by(month_name) %>% 
+  summarize(mean_n = mean(`NO2+NO3 (umol/l)`), se_n = sd(`NO2+NO3 (umol/l)`)/sqrt(length(`NO2+NO3 (umol/l)`))) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = month_name, y = mean_n)) +
+  geom_point(size = 5) +
+  geom_line() +
+  geom_errorbar(aes(ymin = mean_n - se_n, ymax = mean_n + se_n), width = 0, alpha = 0.5) +
+  labs(y = "N+N (µM)",
+       x = "") + 
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.title = element_blank(),
+        plot.title = element_text(face = "italic", size = 15),
+        legend.text = element_text(size = 15),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Times"))+
+  geom_hline(yintercept = 1, color = "red")
+  
+
+lter_bottle_monthly_nuts_sum <- lter_bottle_monthly_nuts %>% 
+  group_by(month_name) %>% 
+  summarize(mean_n = mean(`NO2+NO3 (umol/l)`)) %>% 
+  ungroup()
+
+
+
+```
+
+# Combine CN, NUTS and Biomass plots 
+
+```{r}
+
+
+library(cowplot)
+
+CN_nuts_part_one <- plot_grid(nuts_p, MK_CN,labels = c('B', 'C'), ncol = 1,label_size = 20, label_fontfamily = "Times New Roman")
+
+
+biomass_CN_nuts <- plot_grid(ca_kelp_biomass, CN_nuts_part_one,labels = c('A', ''), label_size = 20 ,label_fontfamily = "Times New Roman")
+
+
+ggsave("biomass_CN_nuts.png", plot = biomass_CN_nuts, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 15, height = 8 , device='tiff', dpi=1000, units = "in")
+
+
+
+
+
 
 
 
@@ -188,7 +329,7 @@ library(ggplot2)
 
 ```{r}
     
-nc_data <- nc_open('CAkelpCanopyEnv_2021_final.nc')
+nc_data <- nc_open(here("Data", 'CAkelpCanopyEnv_2021_final.nc'))
 
 
 lon <- ncvar_get(nc_data, "lon")
@@ -248,8 +389,12 @@ biomass_long_noNA <- biomass_long %>%
 biomass_long_no_blank_images_df <- biomass_long_noNA %>% 
   separate(year_quarter, into = c("year", "quarter"), sep = "_")
 
+write.csv(biomass_long_no_blank_images_df, "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Data/biomass_long_no_blank_images_df.csv", row.names = F)
+
 biomass_2021_summer_noNA <- biomass_long_no_blank_images_df %>% 
   filter(year == 2021, quarter == 3)
+
+median(biomass_2021_summer_noNA$kelp_biomass)
 
 annual_quarterly_kelp_biomass <- biomass_long_no_blank_images_df %>% 
   group_by(year, quarter) %>% 
@@ -298,6 +443,7 @@ kelp_annual_quarterly_biomass_area <- merge(annual_quarterly_kelp_biomass, annua
 write.csv(kelp_annual_quarterly_biomass_area, file = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/MP Exudate Sampling/data/Compiled Data/kelp_annual_quarterly_biomass_area.csv", row.names = FALSE)
 
 
+
 ```
 
 
@@ -315,17 +461,17 @@ kelp_biomass_p <- ggplot() +
              aes(x = long, 
                  y = lat, 
                  color = kelp_biomass/1000), 
-             size = 2,
+             size = 0.5,
              position = position_jitter(width = 0.025, height = 0.025)) +
   labs(x = "Longitude (ºW)",
        y = "Latitude (ºN)") +
-  scale_color_gradient2(midpoint = 1, 
-                        low = "gold", 
+  scale_color_gradient2(midpoint = 1.8 , 
+                        low = "goldenrod", 
                         mid = "goldenrod1",
                         high = "goldenrod4", 
                         space = "Lab",
                         name = "Canopy Biomass\n(Mg WW)",
-                        breaks = c(1,4,8,12)) +
+                        breaks = c(1,5,10)) +
    theme(panel.background = element_rect(fill = "white", 
                                          color = "black", 
                                          size = 1.5),
@@ -346,7 +492,13 @@ kelp_biomass_p <- ggplot() +
         text = element_text(family = "Times"))
 
 
-
+#scale_color_gradient2(midpoint = 1.8 , 
+                        low = "goldenrod", 
+                        mid = "goldenrod1",
+                        high = "goldenrod4", 
+                        space = "Lab",
+                        name = "Canopy Biomass\n(Mg WW)",
+                        breaks = c(1,5,10)) +
 
 ggsave(file="ca_kelp_area_orange.svg", plot= kelp_area_p, width=10, height=10)
 
@@ -358,9 +510,10 @@ Plot annual/quarterly totals
 
 ```{r}
 
-kelp_annual_quarterly_biomass_area <- read_csv("kelp_annual_quarterly_biomass_area.csv")
+kelp_annual_quarterly_biomass_area <- read_csv(here("data","kelp_annual_quarterly_biomass_area.csv"))
 
-
+kelp_annual_quarterly_biomass_area <- kelp_annual_quarterly_biomass_area %>% 
+  mutate(quarter = as.factor(quarter))
 
 kelp_biomass_CA_annual <- ggplot(data = kelp_annual_quarterly_biomass_area, 
        aes(x = interaction(year, 
@@ -368,7 +521,8 @@ kelp_biomass_CA_annual <- ggplot(data = kelp_annual_quarterly_biomass_area,
                            lex.order = TRUE), 
            y = total_biomass_kg_ww, 
            group = 1)) +
-  labs(y = "Canopy Biomass (kg WW)") +
+  labs(y = "Canopy Biomass (kg WW)",
+       x = "") +
   geom_line(colour = "blue") +
   coord_cartesian(ylim = c(800000, 500000000), expand = FALSE, clip = "off") +
   theme_bw() +
@@ -388,8 +542,773 @@ kelp_biomass_CA_annual <- ggplot(data = kelp_annual_quarterly_biomass_area,
         text = element_text(family = "Times"))
 
 
+kelp_annual_quarterly_biomass_area <- kelp_annual_quarterly_biomass_area %>% 
+  mutate(total_biomass_g_dw = total_biomass_kg_ww * 0.1 *1000) %>% 
+  select(-total_biomass_kg_ww)
+
+
+kelp_annual_quarterly_biomass_area %>% 
+  mutate(quarter = as.numeric(quarter)) %>% 
+  ggplot(aes(group = year)) +
+  geom_point(aes(x = quarter, y = total_biomass_g_dw/1000/10000000, color = year)) +
+  geom_line(aes(x = quarter, y = total_biomass_g_dw/1000/10000000, color = year),
+            orientation = "x") +
+   scico::scale_color_scico(palette = "tokyo", breaks = c(1990,2000,2010,2020)) +
+  labs(y = expression(paste("Biomass (","10"^8," kg DW)")),
+       x = "Quarter") +
+  theme(panel.background = element_rect(fill = "white", 
+                                         color = "black", 
+                                         size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 25),
+        text = element_text(family = "Times"))
+
+
+kelp_annual_quarterly_biomass_area %>% 
+  mutate(quarter = as.numeric(quarter)) %>% 
+  ggplot(aes(group = year)) +
+  geom_tile(aes(x = year, y = quarter, fill = total_biomass_g_dw)) +
+  scico::scale_fill_scico(palette = "lajolla", breaks = c(1e8, 2e8,3e8,4e8)) +
+  labs(fill = expression(paste("Biomass (","10"^8," kg DW)")),
+       x = "Year",
+       y = "Quarter") +
+  theme(panel.background = element_rect(fill = "white", 
+                                         color = "black", 
+                                         size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 25),
+        text = element_text(family = "Times"))
+
+
+```
+# One-Way ANOVA Quarterly Biomass
+
+```{r}
+
+aov_quarter_biomass <- aov(total_biomass_kg_ww ~ quarter, data = kelp_annual_quarterly_biomass_area)
+
+summary(aov_quarter_biomass)
+
+
+TukeyHSD(aov_quarter_biomass)
+
+```
+
+
+# Simple Extrapolation of DOC Production Rates 
+
+```{r}
+
+kelp_annual_quarterly_biomass_area <- kelp_annual_quarterly_biomass_area %>% 
+  mutate(total_biomass_g_dw = total_biomass_kg_ww * 0.1 *1000) %>% 
+  select(-total_biomass_kg_ww)
+
+
+quarterly_DOC_production <- kelp_annual_quarterly_biomass_area %>% 
+  mutate(DOC_production_all_mature = (((total_biomass_g_dw * (0.88*12*91.25))/1000/1000*12)/1000/1000/1000) + 
+           (((total_biomass_g_dw * (3.3*12*91.25))/1000/1000*12)/1000/1000/1000),
+         DOC_summer_senescence_10 = case_when(
+           quarter %in% c("1","2","4") ~ (total_biomass_g_dw * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000,
+           quarter == "3" ~ ((total_biomass_g_dw * 0.9 * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000) +
+             ((total_biomass_g_dw * 0.1 * ((14.0*24*91.25))/1000/1000*12)/1000/1000/1000)),
+         DOC_summer_senescence_20 = case_when(
+           quarter %in% c("1","2","4") ~ (total_biomass_g_dw * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000,
+           quarter == "3" ~ ((total_biomass_g_dw * 0.8 * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000) +
+             ((total_biomass_g_dw * 0.2 * ((14.0*24*91.25))/1000/1000*12)/1000/1000/1000)),
+         DOC_summer_senescence_30 = case_when(
+           quarter %in% c("1","2","4") ~ (total_biomass_g_dw * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000,
+           quarter == "3" ~ ((total_biomass_g_dw * 0.7 * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000) +
+             ((total_biomass_g_dw * 0.3 * ((14.0*24*91.25))/1000/1000*12)/1000/1000/1000)),
+         DOC_summer_senescence_40 = case_when(
+           quarter %in% c("1","2","4") ~ (total_biomass_g_dw * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000,
+           quarter == "3" ~ ((total_biomass_g_dw * 0.6 * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000) +
+             ((total_biomass_g_dw * 0.4 * ((14.0*24*91.25))/1000/1000*12)/1000/1000/1000)),
+         DOC_summer_senescence_50 = case_when(
+           quarter %in% c("1","2","4") ~ (total_biomass_g_dw * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000,
+           quarter == "3" ~ ((total_biomass_g_dw * 0.5 * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000) +
+             ((total_biomass_g_dw * 0.5 * ((14.0*24*91.25))/1000/1000*12)/1000/1000/1000)),
+         DOC_summer_senescence_60 = case_when(
+           quarter %in% c("1","2","4") ~ (total_biomass_g_dw * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000,
+           quarter == "3" ~ ((total_biomass_g_dw * 0.4 * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000) +
+             ((total_biomass_g_dw * 0.6 * ((14.0*24*91.25))/1000/1000*12)/1000/1000/1000)),
+         DOC_summer_senescence_70 = case_when(
+           quarter %in% c("1","2","4") ~ (total_biomass_g_dw * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000,
+           quarter == "3" ~ ((total_biomass_g_dw * 0.3 * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000) +
+             ((total_biomass_g_dw * 0.7 * ((14.0*24*91.25))/1000/1000*12)/1000/1000/1000)),
+         DOC_summer_senescence_80 = case_when(
+           quarter %in% c("1","2","4") ~ (total_biomass_g_dw * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000,
+           quarter == "3" ~ ((total_biomass_g_dw * 0.2 * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000) +
+             ((total_biomass_g_dw * 0.8 * ((14.0*24*91.25))/1000/1000*12)/1000/1000/1000)),
+         DOC_summer_senescence_90 = case_when(
+           quarter %in% c("1","2","4") ~ (total_biomass_g_dw * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000,
+           quarter == "3" ~ ((total_biomass_g_dw * 0.1 * ((2.3*24*91.25))/1000/1000*12)/1000/1000/1000) +
+             ((total_biomass_g_dw * 0.9 * ((14.0*24*91.25))/1000/1000*12)/1000/1000/1000)))
+
+
+
+
+
+doc_production_first_look <- quarterly_DOC_production %>% 
+  group_by(year) %>% 
+  summarize(biomass_C = sum(total_biomass_g_dw/1000/1000/1000*0.3),
+            DOC_annual = sum(DOC_production_all_mature),
+            DOC_annual_10 = sum(DOC_summer_senescence_10),
+             DOC_annual_20 = sum(DOC_summer_senescence_20),
+             DOC_annual_30 = sum(DOC_summer_senescence_30),
+             DOC_annual_40 = sum(DOC_summer_senescence_40),
+             DOC_annual_50 = sum(DOC_summer_senescence_50),
+             DOC_annual_60 = sum(DOC_summer_senescence_60),
+             DOC_annual_70 = sum(DOC_summer_senescence_70),
+             DOC_annual_80 = sum(DOC_summer_senescence_80),
+             DOC_annual_90 = sum(DOC_summer_senescence_90)) %>% 
+  ggplot() +
+  geom_line(aes(x = year, y = biomass_C), color = "black") +
+  geom_line(aes(x = year, y = DOC_annual), color = "blue") +
+  geom_line(aes(x = year, y = DOC_annual_10), color = "goldenrod1") +
+  geom_line(aes(x = year, y = DOC_annual_90), color = "red") +
+  labs(y = "Gg C",
+       x = "") +
+  scale_x_continuous(expand = c(0,0)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 24),
+        axis.text = element_text(size = 30, color = "black"),
+        axis.title = element_text(size = 25),
+        text = element_text(family = "Times")) 
+
+
+write.csv(quarterly_DOC_production, file = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Data/quarterly_DOC_production.csv", row.names = FALSE)
 
 
 
 ```
+
+# Tom's Biomass Data
+
+```{r}
+
+biomass_phys <- read_csv(here("Data", "biomass_phys_state.csv"))
+
+
+biomass_phys <- biomass_phys %>% 
+  mutate(month_name = case_when(
+    month == 1 ~ "Jan",
+    month == 2 ~ "Feb",
+    month == 3 ~ "Mar",
+    month == 4 ~ "Apr",
+    month == 5 ~ "May",
+    month == 6 ~ "Jun",
+    month == 7 ~ "Jul",
+    month == 8 ~ "Aug",
+    month == 9 ~ "Sep",
+    month == 10 ~ "Oct",
+    month == 11 ~ "Nov",
+    month == 12 ~ "Dec"
+  )) 
+
+biomass_phys$month_name <- biomass_phys$month_name <- factor(biomass_phys$month_name, levels = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))
+
+```
+
+# CA Wide DOC Production Rates
+
+```{r}
+
+monthly_DOC_production <- biomass_phys %>% 
+  mutate(DOC_production_all_mature = ((((total_biomass*1000*0.12) * (0.9*12*30))/1000/1000*12)/1000/1000/1000) + 
+           ((((total_biomass*1000*0.12) * (3.3*12*30))/1000/1000*12)/1000/1000/1000),
+         DOC_production_senescent = (senescent_biomass*1000*0.12) * (((14.0*24*30))/1000/1000*12)/1000/1000/1000,
+         DOC_production_mature = ((((mature_biomass*1000*0.12) * (0.9*12*30))/1000/1000*12)/1000/1000/1000) + 
+           ((((mature_biomass*1000*0.12) * (3.3*12*30))/1000/1000*12)/1000/1000/1000),
+         DOC_production_mature_senescent = DOC_production_senescent + DOC_production_mature,
+         percent_biomass = DOC_production_mature_senescent/(total_biomass*0.12*0.3/1000/1000)*100)
+
+
+doc_production_first_look <- monthly_DOC_production %>% 
+  group_by(year) %>% 
+  summarize(biomass_C = sum(total_biomass/1000/1000*0.3),
+            DOC_annual_no_senescence = sum(DOC_production_all_mature),
+            DOC_annual_w_senescence = sum(DOC_production_mature_senescent)) %>% 
+  ggplot() +
+  geom_line(aes(x = year, y = DOC_annual_no_senescence),
+            color ="#266A25",
+            size = 3) +
+  geom_line(aes(x = year, y = DOC_annual_w_senescence), 
+            color = "#BD9C3D",
+            size = 3) +
+  labs(x = "") +
+  ylab(expression(DOC~Production~(Gg~C ~ yr^{-1})))+
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(breaks = c(0,5,10,15), limits = c(0,15)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 24),
+        axis.text = element_text(size = 30, color = "black"),
+        axis.title = element_text(size = 25),
+        text = element_text(family = "Times")) 
+
+
+
+
+```
+
+# Annual DOC Production: Boxplot, Senescence vs. No Senescence
+
+```{r}
+
+library(ggpubr)
+
+annual_DOC_production <- monthly_DOC_production %>% 
+  group_by(year) %>% 
+  summarize(biomass_C = sum(total_biomass/1000/1000*0.3),
+            DOC_annual_no_senescence = sum(DOC_production_all_mature),
+            DOC_annual_w_senescence = sum(DOC_production_mature_senescent)) %>% 
+  ungroup() %>% 
+  select(year, DOC_annual_no_senescence, DOC_annual_w_senescence) %>% 
+  pivot_longer(!year, names_to = "w_wout_senescence", values_to = "annual_DOC_production") %>%
+  mutate(senescence = case_when(
+    w_wout_senescence == "DOC_annual_no_senescence" ~ "-Senescence",
+    w_wout_senescence == "DOC_annual_w_senescence" ~ "+Senescence"
+  ))
+
+
+
+annual_DOC_production_boxplot <- annual_DOC_production %>% 
+  ggplot() +
+  geom_boxplot(aes(y = annual_DOC_production, x = senescence, fill = senescence)) +
+   geom_point(aes(x = senescence, y = annual_DOC_production, color = senescence),
+             position = position_jitterdodge()) +
+  ylab(expression(DOC~Production~(Gg~C ~ yr^{-1})))+
+  labs(x = "",
+       fill = "") +
+  scale_fill_manual(values = c("#266A25","#BD9C3D")) +
+  scale_color_manual(values = c("darkgreen","darkgoldenrod")) +
+  theme(panel.background = element_rect(fill = "white", 
+                                        color = "black", 
+                                        size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", 
+                                        color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.position = "none",
+        legend.text = element_text(size = 15),
+        legend.title = element_blank(),
+        axis.text = element_text(size = 20, 
+                                 color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+
+```
+# ANOVA DOC production w and w/out senescnece
+
+```{r}
+
+
+t.test_senescence_DOC_production <- t.test(data = annual_DOC_production, annual_DOC_production ~ senescence)
+
+t.test_senescence_DOC_production)
+```
+
+
+
+# Percent Senescent
+
+```{r}
+
+percent_senescent <- biomass_phys %>%  
+  ggplot(aes(x = month_name,
+             y = percent_senescent)) +
+  geom_point(size = 4) +
+  labs(y = "Senescent Biomass (% Total)",
+       x = "") +
+  scale_y_continuous(breaks = c(0,25,50,75,100), limits = c(0,100)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) 
+
+total_biomass <- biomass_phys %>%  
+  ggplot(aes(x = month_name,
+             y = total_biomass/1000/1000,
+             group = year)) +
+  geom_point(size = 4) +
+  geom_line(aes(x = month_name, y = total_biomass/1000/1000),
+            orientation = "x") +
+  labs(y = "Total Biomass (Gg WW)",
+       x = "") +
+  scale_y_continuous(breaks = c(0,100,200,300,400), limits = c(0,400)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+  
+monthly_DOC_production_p <- monthly_DOC_production %>%  
+  ggplot() +
+  geom_point(aes(x = month_name,
+             y = DOC_production_mature_senescent),
+             size = 4) +
+  labs(x = "") +
+  ylab(expression(DOC~Production~(Gg~C ~ month^{-1})))+
+  scale_y_continuous(breaks = c(0,1,2,3), limits = c(0,3)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) 
+
+
+percent_biomass <- monthly_DOC_production %>%  
+  ggplot(aes(x = month_name,
+             y = percent_biomass,
+             group = year)) +
+  geom_point(size = 4) +
+  labs(y = "Monthyl DOC Production (%Biomass C)",
+       x = "") +
+  scale_y_continuous(breaks = c(0,10,20,30,40), limits = c(0,40)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times"))
+
+monthly_DOC_production %>% 
+  group_by(year) %>% 
+  mutate(DOC_annual_no_senescence = sum(DOC_production_all_mature),
+         DOC_annual_w_senescence = sum(DOC_production_mature_senescent),
+         DOC_annual_senescence = sum(DOC_production_senescent)) %>% 
+  mutate(senescence_DOC_total_fraction = DOC_annual_senescence/DOC_annual_w_senescence,
+         fold_change = DOC_annual_w_senescence/DOC_annual_no_senescence) %>% 
+  ungroup() %>% 
+  summarise(mean_senescence_fraction = mean(senescence_DOC_total_fraction),
+            sd_senescece_fraction = sd(senescence_DOC_total_fraction),
+            mean_fold_change = mean(fold_change),
+            sd_fold_change = sd(fold_change))
+
+  
+monthyl_DOC_production_vs_biomass_plot <- monthly_DOC_production %>%  
+  ggplot() +
+  geom_point(aes(x = total_biomass/1000/1000,
+             y = DOC_production_mature_senescent),
+             size = 4) +
+  labs(x = "Total Biomass (GgC Wet Weight)") +
+  ylab(expression(DOC~Production~(Gg~C ~ month^{-1})))+
+  scale_y_continuous(breaks = c(0,1,2,3), limits = c(0,3)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 20, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) 
+
+DOC_biomass_lm <- lmodel2(data = monthly_DOC_production, DOC_production_mature_senescent~total_biomass)
+
+DOC_biomass_lm
+
+```
+
+# Average Standing biomass relative to maximum 
+
+```{r}
+
+biomass_phys %>% 
+  select(total_biomass, month_name, year) %>% 
+  mutate(percent_max_biomass = total_biomass / max(total_biomass) * 100) %>% 
+  summarize(mean_percent_total_biomass = mean(percent_max_biomass),
+            sd_mean_percent_biomass = sd(percent_max_biomass),
+            median_percent_total_biomass = median(percent_max_biomass))
+
+
+
+
+
+```
+
+
+
+
+
+# Biomass min max
+
+```{r}
+min(biomass_phys$total_biomass)
+
+max(biomass_phys$total_biomass)
+
+
+max(monthly_DOC_production$percent_biomass)
+
+min(monthly_DOC_production$percent_biomass)
+
+```
+
+
+# Monthyl DOC Production x Monthyl Biomass 
+
+
+```{r}
+
+monthly_DOC_production %>% 
+  ggplot(x = total_biomass, y = DOC_production_mature_senescent) +
+  geom_point()
+
+
+
+
+```
+
+
+# Bootstrapping: Senescent DOCex 
+
+
+```{r}
+
+
+senescent_kelp_DOC <-  MP_DOC_NPP_phys_env_sum %>% 
+  filter(age_d > 50,
+         flag != 2) %>% 
+  select(DOC_umolC_g_hr)
+
+median(senescent_kelp_DOC$DOC_umolC_g_hr) # 6.5
+
+library(boot)
+
+boot.median <- function(x,i) {
+  median(x[i])
+}
+
+bootSenescentDOC <- boot(senescent_kelp_DOC$DOC_umolC_g_hr, boot.median, R = 100000)
+
+bootSenescentDOC
+
+boot.ci(bootSenescentDOC, type = "perc") # 95% CI = 4.6 - 12.7 umol C g hr
+
+```
+
+
+# Bootstrapping: Mature Dark DOC
+
+
+```{r}
+
+
+mature_DARK_DOC <-  MP_DOC_NPP_phys_env_sum %>% 
+  filter(age_d < 50,
+         flag != 2,
+         PAR == 0) %>% 
+  select(DOC_umolC_g_hr)
+
+hist(mature_DARK_DOC$DOC_umolC_g_hr,  breaks = 10)
+
+median(mature_DARK_DOC$DOC_umolC_g_hr) # 0.7
+mean(mature_DARK_DOC$DOC_umolC_g_hr) # 0.9
+
+library(boot)
+
+boot.median <- function(x,i) {
+  median(x[i])
+}
+
+bootMatureDOC_dark <- boot(mature_DARK_DOC$DOC_umolC_g_hr, boot.median, R = 100000)
+
+bootMatureDOC_dark
+
+boot.ci(bootMatureDOC_dark, type = "perc") # 95% CI = 0.2 - 1.3 umol C g hr
+
+```
+
+
+# Bootstrapping: Mature Light DOC
+
+
+```{r}
+
+
+mature_LIGHT_DOC <-  MP_DOC_NPP_phys_env_sum %>% 
+  filter(age_d < 50,
+         flag != 2,
+         PAR > 300) %>% 
+  select(DOC_umolC_g_hr)
+
+hist(mature_LIGHT_DOC$DOC_umolC_g_hr,  breaks = 10)
+
+median(mature_LIGHT_DOC$DOC_umolC_g_hr) # 3.2
+mean(mature_LIGHT_DOC$DOC_umolC_g_hr) # 3.3
+
+library(boot)
+
+boot.median <- function(x,i) {
+  median(x[i])
+}
+
+bootmature_LIGHT_DOC <- boot(mature_LIGHT_DOC$DOC_umolC_g_hr, boot.median, R = 100000)
+
+bootmature_LIGHT_DOC # median +- se = 3.2 +- 0.3
+
+boot.ci(bootmature_LIGHT_DOC, type = "perc") # 95% CI = 2.6 - 3.8 umol C g hr
+
+```
+
+
+# CA Wide DOC Production Rates
+
+```{r}
+
+monthly_DOC_production <- biomass_phys %>% 
+  mutate(total_biomass = total_biomass*1000*0.12,
+         senescent_biomass = senescent_biomass*1000*0.12,
+         mature_biomass = mature_biomass*1000*0.12) %>% 
+  mutate(DOC_production_all_mature = 
+           (((total_biomass * (0.7*12*30))/1000/1000*12)/1000/1000/1000) + 
+           (((total_biomass * (3.2*12*30))/1000/1000*12)/1000/1000/1000),
+         
+         DOC_production_all_mature_025 = 
+           (((total_biomass * (0.2*12*30))/1000/1000*12)/1000/1000/1000) + 
+           (((total_biomass * (2.6*12*30))/1000/1000*12)/1000/1000/1000),
+         
+         DOC_production_all_mature_975 = 
+           (((total_biomass * (1.3*12*30))/1000/1000*12)/1000/1000/1000) + 
+           (((total_biomass * (3.8*12*30))/1000/1000*12)/1000/1000/1000),
+         
+         DOC_production_senescent = 
+           senescent_biomass * (((6.5*24*30))/1000/1000*12)/1000/1000/1000,
+         
+         DOC_production_senescent_025 = 
+           senescent_biomass * (((4.6*24*30))/1000/1000*12)/1000/1000/1000,
+         
+         DOC_production_senescent_975 = 
+           senescent_biomass * (((12.7*24*30))/1000/1000*12)/1000/1000/1000,
+         
+         DOC_production_mature = 
+           (((mature_biomass * (0.7*12*30))/1000/1000*12)/1000/1000/1000) + 
+           (((mature_biomass * (3.2*12*30))/1000/1000*12)/1000/1000/1000),
+         
+         DOC_production_mature_025 = 
+           (((mature_biomass * (0.2*12*30))/1000/1000*12)/1000/1000/1000) + 
+           (((mature_biomass* (2.6*12*30))/1000/1000*12)/1000/1000/1000),
+         
+         DOC_production_mature_975 = 
+           (((mature_biomass * (1.3*12*30))/1000/1000*12)/1000/1000/1000) + 
+           (((mature_biomass * (3.8*12*30))/1000/1000*12)/1000/1000/1000),
+         
+         
+         DOC_production_mature_senescent = 
+           DOC_production_senescent + DOC_production_mature,
+         
+         DOC_production_mature_senescent_025 = 
+           DOC_production_senescent_025 + DOC_production_mature_025, 
+         
+         DOC_production_mature_senescent_975 = 
+           DOC_production_senescent_975 + DOC_production_mature_975,
+         
+         senescence_percent_DOC = 
+           (DOC_production_senescent / DOC_production_mature_senescent)*100)
+
+
+doc_production_first_look <- monthly_DOC_production %>% 
+  group_by(year) %>% 
+  summarize(biomass_C = sum(total_biomass/1000/1000*0.3),
+            DOC_annual_no_senescence = sum(DOC_production_all_mature),
+            DOC_annual_no_senescence_025 = sum(DOC_production_all_mature_025),
+            DOC_annual_no_senescence_975 = sum(DOC_production_all_mature_975),
+            DOC_annual_w_senescence = sum(DOC_production_mature_senescent),
+            DOC_annual_w_senescence_025 = sum(DOC_production_mature_senescent_025),
+            DOC_annual_w_senescence_975 = sum(DOC_production_mature_senescent_975)) %>% 
+  ggplot() +
+  geom_line(aes(x = year, y = DOC_annual_no_senescence),
+            color ="#266A25",
+            size = 3) +
+  geom_line(aes(x = year, y = DOC_annual_no_senescence_025),
+            color ="#266A25",
+            size = 1.5,
+            linetype = "dotted") +
+  geom_line(aes(x = year, y = DOC_annual_no_senescence_975),
+            color ="#266A25",
+            size = 1.5,
+            linetype = "dotted") +
+  geom_line(aes(x = year, y = DOC_annual_w_senescence), 
+            color = "#BD9C3D",
+            size = 3) +
+  geom_line(aes(x = year, y = DOC_annual_w_senescence_025), 
+            color = "#BD9C3D",
+            size = 1.5,
+            linetype = "dotted") +
+  geom_line(aes(x = year, y = DOC_annual_w_senescence_975), 
+            color = "#BD9C3D",
+            size = 1,
+            linetype = "dotted") +
+  labs(x = "") +
+  ylab(expression(DOC~Production~(Gg~C ~ yr^{-1})))+
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(breaks = c(0,5,10,15), limits = c(0,15)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.key.height = unit(0.8, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 24),
+        axis.text = element_text(size = 30, color = "black"),
+        axis.title = element_text(size = 25),
+        text = element_text(family = "Times")) 
+
+
+
+
+```
+
+# Annual DOC Production
+
+```{r}
+doc_production_annual <- monthly_DOC_production %>% 
+  group_by(year) %>% 
+  summarize(biomass_C = sum(total_biomass/1000/1000*0.3),
+            DOC_annual_no_senescence = sum(DOC_production_all_mature),
+            DOC_annual_no_senescence_025 = sum(DOC_production_all_mature_025),
+            DOC_annual_no_senescence_975 = sum(DOC_production_all_mature_975),
+            DOC_annual_w_senescence = sum(DOC_production_mature_senescent),
+            DOC_annual_w_senescence_025 = sum(DOC_production_mature_senescent_025),
+            DOC_annual_w_senescence_975 = sum(DOC_production_mature_senescent_975),
+            DOC_annual_senescence = sum(DOC_production_senescent),
+            percent_senescence = DOC_annual_senescence/DOC_annual_w_senescence,
+            fold_change = DOC_annual_w_senescence/DOC_annual_no_senescence)
+
+
+mean(doc_production_annual$percent_senescence)
+
+sd(doc_production_annual$percent_senescence)
+ 
+# Summary stats annual DOC production with senescence 
+ 
+mean(doc_production_annual$DOC_annual_w_senescence)
+
+sd(doc_production_annual$DOC_annual_w_senescence)
+
+# Summary stats annual DOC production without senescence 
+
+mean(doc_production_annual$DOC_annual_no_senescence)
+
+sd(doc_production_annual$DOC_annual_no_senescence)
+
+# Fold change with and without considering senescence
+
+mean(doc_production_annual$fold_change)
+
+sd
+
+```
+
+# Biomass Physiology Summary statistics
+
+```{r}
+
+biomass_phys %>% 
+  mutate(season = case_when(
+         month %in% c(12,1,2) ~ "Winter",
+         month %in% c(3,4,5) ~ "Spring",
+         month %in% c(6,7,8) ~ "Summer",
+         month %in% c(9,10,11) ~ "Fall"
+         )) %>% 
+  group_by(season) %>% 
+  summarize(mean_biomass = mean(total_biomass)/1000/1000,
+            sd_biomass = sd(total_biomass)/1000/1000,
+            mean_percent_senescent = mean(percent_senescent),
+            sd_percent_senescent = sd(percent_senescent))
+
+
+
+```
+
+# Biomass January vs August 
+```{r}
+
+biomass_january <- biomass_phys$total_biomass[biomass_phys$month == 1]
+
+  
+biomass_august <- biomass_phys$total_biomass[biomass_phys$month == 8]
+
+
+plot(biomass_january,biomass_august )
+
+
+```
+
 
