@@ -1,0 +1,77 @@
+﻿filename,ATTRIBUTE_sample_type,ATTRIBUTE_LC_vial_name,ATTRIBUTE_source,ATTRIBUTE_sample_date,ATTRIBUTE_season,ATTRIBUTE_treatment,ATTRIBUTE_phys_state,ATTRIBUTE_blade,ATTRIBUTE_age_d,ATTRIBUTE_tissue_CN,ATTRIBUTE_DOC_prePPL_uMC
+230809_B0.mzML ,Sample,230809 B0,Ambient,8/9/23,Summer,Control,Mature,0,16,NA,61.4
+230809_B1.mzML ,Sample,230809 B1,Kelp,8/9/23,Summer,Exudate,Mature,1,16,31,65
+230809_B2.mzML ,Sample,230809 B2,Kelp,8/9/23,Summer,Exudate,Mature,2,16,31.6,63.3
+230809_B3.mzML ,Sample,230809 B3,Kelp,8/9/23,Summer,Exudate,Mature,3,16,34.8,63.8
+230809_B4.mzML ,Sample,230809 B4,Kelp,8/9/23,Summer,Exudate,Mature,4,16,27.9,72.3
+230809_B5.mzML ,Sample,230809 B5,Kelp,8/9/23,Summer,Exudate,Mature,5,16,29.3,71
+230809_B6.mzML ,Sample,230809 B6,Kelp,8/9/23,Summer,Exudate,Mature,6,16,25.1,79.6
+230823_B0.mzML ,Sample,230823 B0,Ambient,8/23/23,Summer,Control,Mature,0,30,NA,60.3
+230823_B1.mzML ,Sample,230823 B1,Kelp,8/23/23,Summer,Exudate,Mature,1,30,29.1,66.8
+230823_B2.mzML ,Sample,230823 B2,Kelp,8/23/23,Summer,Exudate,Mature,2,30,28.6,90.4
+230823_B3.mzML ,Sample,230823 B3,Kelp,8/23/23,Summer,Exudate,Mature,3,30,32.1,74
+230823_B4.mzML ,Sample,230823 B4,Kelp,8/23/23,Summer,Exudate,Mature,4,30,28.1,63.9
+230823_B5.mzML ,Sample,230823 B5,Kelp,8/23/23,Summer,Exudate,Mature,5,30,31.6,63.2
+230823_B6.mzML ,Sample,230823 B6,Kelp,8/23/23,Summer,Exudate,Mature,6,30,30.2,64.6
+230905_B0.mzML ,Sample,230905 B0,Ambient,9/5/23,Summer,Control,Mature,0,43,NA,59.3
+230905_B1.mzML ,Sample,230905 B1,Kelp,9/5/23,Summer,Exudate,Mature,1,43,32.6,64.2
+230905_B2.mzML ,Sample,230905 B2,Kelp,9/5/23,Summer,Exudate,Mature,2,43,33.8,66
+230905_B3.mzML ,Sample,230905 B3,Kelp,9/5/23,Summer,Exudate,Mature,3,43,24.9,65.6
+230905_B4.mzML ,Sample,230905 B4,Kelp,9/5/23,Summer,Exudate,Mature,4,43,33.2,66.9
+230905_B5.mzML ,Sample,230905 B5,Kelp,9/5/23,Summer,Exudate,Mature,5,43,29.7,62.1
+230905_B6.mzML ,Sample,230905 B6,Kelp,9/5/23,Summer,Exudate,Mature,6,43,20.4,72.3
+230926_B0.mzML ,Sample,230926 B0,Ambient,9/26/23,Summer,Control,Senescent,0,64,NA,56.1
+230926_B1.mzML ,Sample,230926 B1,Kelp,9/26/23,Summer,Exudate,Senescent,1,64,33.7,74.5
+230926_B2.mzML ,Sample,230926 B2,Kelp,9/26/23,Summer,Exudate,Senescent,2,64,34.8,71.2
+230926_B3.mzML ,Sample,230926 B3,Kelp,9/26/23,Summer,Exudate,Senescent,3,64,39.8,148.4
+230926_B4.mzML ,Sample,230926 B4,Kelp,9/26/23,Summer,Exudate,Senescent,4,64,35.9,132.3
+230926_B5.mzML ,Sample,230926 B5,Kelp,9/26/23,Summer,Exudate,Senescent,5,64,33,64.5
+230926_B6.mzML ,Sample,230926 B6,Kelp,9/26/23,Summer,Exudate,Senescent,6,64,31.6,74
+231010_B0.mzML ,Sample,231010 B0,Ambient,10/10/23,Summer,Control,Senescent,0,78,NA,60.6
+231010_B1.mzML ,Sample,231010 B1,Kelp,10/10/23,Summer,Exudate,Senescent,1,78,34.4,73.3
+231010_B2.mzML ,Sample,231010 B2,Kelp,10/10/23,Summer,Exudate,Senescent,2,78,37.1,90.4
+231010_B3.mzML ,Sample,231010 B3,Kelp,10/10/23,Summer,Exudate,Senescent,3,78,38.8,146.5
+231010_B4.mzML ,Sample,231010 B4,Kelp,10/10/23,Summer,Exudate,Senescent,4,78,34.4,138.6
+231010_B5.mzML ,Sample,231010 B5,Kelp,10/10/23,Summer,Exudate,Senescent,5,78,35.5,115.2
+231010_B6.mzML ,Sample,231010 B6,Kelp,10/10/23,Summer,Exudate,Senescent,6,78,35.9,102.8
+240417_B0.mzML ,Sample,240417 B0,Ambient,4/17/24,Spring,Control,Senescent,0,16,NA,56.1
+240417_B1.mzML ,Sample,240417 B1,Kelp,4/17/24,Spring,Exudate,Mature,1,16,10.8,66.8
+240417_B2.mzML ,Sample,240417 B2,Kelp,4/17/24,Spring,Exudate,Mature,2,16,9.3,71.2
+240417_B3.mzML ,Sample,240417 B3,Kelp,4/17/24,Spring,Exudate,Mature,3,16,10.1,67
+240417_B4.mzML ,Sample,240417 B4,Kelp,4/17/24,Spring,Exudate,Mature,4,16,9.1,72.3
+240417_B5.mzML ,Sample,240417 B5,Kelp,4/17/24,Spring,Exudate,Mature,5,16,9.8,70.6
+240417_B6.mzML ,Sample,240417 B6,Kelp,4/17/24,Spring,Exudate,Mature,6,16,9.6,69.1
+240507_B0.mzML ,Sample,240507 B0,Ambient,5/7/24,Spring,Control,Mature,0,37,NA,53.6
+240507_B1.mzML ,Sample,240507 B1,Kelp,5/7/24,Spring,Exudate,Mature,1,37,10.7,62
+240507_B3.mzML ,Sample,240507 B3,Kelp,5/7/24,Spring,Exudate,Mature,3,37,9.6,63.8
+240507_B5.mzML ,Sample,240507 B5,Kelp,5/7/24,Spring,Exudate,Mature,5,37,10.1,69.9
+240616_B0.mzML ,Sample,240616 B0,Ambient,6/16/24,Spring,Control,Senescent,0,77,NA,59
+240616_B1.mzML ,Sample,240616 B1,Kelp,6/16/24,Spring,Exudate,Senescent,1,77,18.3,84.6
+240616_B2.mzML ,Sample,240616 B2,Kelp,6/16/24,Spring,Exudate,Senescent,2,77,14.6,88.7
+240616_B3.mzML ,Sample,240616 B3,Kelp,6/16/24,Spring,Exudate,Senescent,3,77,11.6,63.8
+240616_B4.mzML ,Sample,240616 B4,Kelp,6/16/24,Spring,Exudate,Senescent,4,77,10.8,65.8
+240616_B5.mzML ,Sample,240616 B5,Kelp,6/16/24,Spring,Exudate,Senescent,5,77,17.4,70.4
+240616_B6.mzML ,Sample,240616 B6,Kelp,6/16/24,Spring,Exudate,Senescent,6,77,18.8,72.8
+240901_B1.mzML,Sample,Sample,EtAOC Kelp,9/1/24,September,Exudate,Mature,NA,NA,NA,NA
+Blank_restart_1.mzML,Blank,Analytical Blank,LCMS Water,9/1/24,Blank,Blank,NA,NA,NA,NA,NA
+Blank1.mzML,Blank,Analytical Blank,LCMS Water,9/1/24,Blank,Blank,NA,NA,NA,NA,NA
+Blank2.mzML,Blank,Analytical Blank,LCMS Water,9/1/24,Blank,Blank,NA,NA,NA,NA,NA
+Blank3.mzML,Blank,Analytical Blank,LCMS Water,9/1/24,Blank,Blank,NA,NA,NA,NA,NA
+Blank4_before_neg.mzML,Blank,Analytical Blank,LCMS Water,9/1/24,Blank,Blank,NA,NA,NA,NA,NA
+Chance_pooled_QC_1.mzML,Sample,QC Pooled,QC Pooled,9/1/24,QC Pooled,Pooled,NA,NA,NA,NA,NA
+Chance_pooled_QC_2.mzML,Sample,QC Pooled,QC Pooled,9/1/24,QC Pooled,Pooled,NA,NA,NA,NA,NA
+Chance_pooled_QC_3.mzML,Sample,QC Pooled,QC Pooled,9/1/24,QC Pooled,Pooled,NA,NA,NA,NA,NA
+Chance_pooled_QC_4.mzML,Sample,QC Pooled,QC Pooled,9/1/24,QC Pooled,Pooled,NA,NA,NA,NA,NA
+Chance_pooled_QC_restart_1.mzML,Sample,QC Pooled,QC Pooled,9/1/24,QC Pooled,Pooled,NA,NA,NA,NA,NA
+Culture_Remin_D.mzML,Sample,Culture,Culture,9/1/24,Culture,Culture,NA,NA,NA,NA,NA
+Culture_Remin_E.mzML,Sample,Culture,Culture,9/1/24,Culture,Culture,NA,NA,NA,NA,NA
+Culture_Remin_F.mzML,Sample,Culture,Culture,9/1/24,Culture,Culture,NA,NA,NA,NA,NA
+Process_Blank_1.mzML ,Blank,Process Blank 1,LCMS Water,9/1/24,Blank,Blank,NA,NA,NA,NA,NA
+Process_Blank_2.mzML ,Blank,Process Blank 2,LCMS Water,9/1/24,Blank,Blank,NA,NA,NA,NA,NA
+Process_Blank_3.mzML ,Blank,Process Blank 3,LCMS Water,9/1/24,Blank,Blank,NA,NA,NA,NA,NA
+QC_mix_1.mzML,Sample,QC,QC,9/1/24,QC,QC,NA,NA,NA,NA,NA
+QC_mix_restart_1.mzML,Sample,QC,QC,9/1/24,QC,QC,NA,NA,NA,NA,NA
+QC_mix2.mzML,Sample,QC,QC,9/1/24,QC,QC,NA,NA,NA,NA,NA
+QC_mix3.mzML,Sample,QC,QC,9/1/24,QC,QC,NA,NA,NA,NA,NA
+QC_mix4.mzML,Sample,QC,QC,9/1/24,QC,QC,NA,NA,NA,NA,NA
+QC_mix5.mzML,Sample,QC,QC,9/1/24,QC,QC,NA,NA,NA,NA,NA
