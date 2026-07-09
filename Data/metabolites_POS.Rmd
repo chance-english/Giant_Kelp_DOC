@@ -1,0 +1,1887 @@
+---
+title: "metabolites_POS"
+output: html_document
+date: "2025-08-08"
+---
+
+```{r setup, include=FALSE, echo=F, warning=F, message=F}
+knitr::opts_chunk$set(echo = TRUE, message = F, echo = F, warning = F)
+```
+
+```{r, include=FALSE, echo=F, warning=F, message=F}
+
+
+
+library(tidyverse)
+library(lmodel2)
+library(ggplot2)
+library(readxl)
+library(kableExtra)
+library(scales)
+library(factoextra)
+library(mgcv)
+library(janitor)
+library(broom)
+library(here)
+library(rstatix)
+library(ggpubr)
+library(vegan)
+library(ggbump)
+library(RColorBrewer)
+library(scico)
+library(sicegar)
+
+library(plotly)
+
+```
+
+
+# Positive Mode
+
+# Load in metadata feature quant table, and SIRIUS formula & compound class
+
+```{r}
+
+metadata_pos <- read_csv(here("Data", "metabolites", "POS", "MP_Metabolites_Samples_Metadata.csv"))
+
+fqt_pos <- read_csv(here("Data", "metabolites", "POS","240909_Chance_kelp_GNPS_V2_quant.csv"))
+
+canopus_formula_class_pos <- read_csv(here("Data", "metabolites", "POS","canopus_formula_summary.csv"))
+
+SIRIUS_formula_highscore_POS <- read_csv(here("Data", "metabolites", "POS","formula_identifications.csv"))
+
+#SIRIUS_formula_highscore_POS <- SIRIUS_formula_highscore_POS %>% 
+  filter(SiriusScoreNormalized >= 0.8)
+```
+
+
+# Merge metadata and fqt
+
+```{r}
+
+# Remove "Peak Area" from column names to match metadata 
+
+
+fqt_pos <- fqt_pos %>%
+  rename_all(~ gsub(" Peak area", "", .x))
+
+
+# Reshape fqt, make row ID the rowname, make long based on column name 
+
+fqt_pos_long <- fqt_pos %>% 
+  select(`row ID`,`230809_B0.mzML`:`Chance_pooled_QC_3.mzML`) %>% 
+  pivot_longer(!'row ID', names_to = "filename", values_to = "peak_area")
+
+# Merge long fqt with metadata and remove non samples or blanks
+
+fqt_long_metadata_pos <- merge(fqt_pos_long, metadata_pos, by = "filename") %>% 
+  filter(ATTRIBUTE_source %in% c("Ambient", "Kelp", "Blank", "LCMS Water"))
+
+
+
+
+```
+
+# Filter feature table 
+
+```{r}
+
+# Remove background features (found in process and analytical blanks)
+
+filtered_ids_pos <- fqt_long_metadata_pos %>%
+  filter(ATTRIBUTE_source %in% c("Blank", "LCMS Water") & peak_area > 0) %>%
+  pull(`row ID`)
+
+fqt_long_metadata_blanked_pos <- fqt_long_metadata_pos %>% 
+  filter(! `row ID` %in% filtered_ids_pos) %>% 
+  filter(ATTRIBUTE_source %in% c("Ambient", "Kelp"))
+
+# Remove transient features (found less than 3 times)
+
+
+fqt_long_metadata_blanked_no_transient_pos <- fqt_long_metadata_blanked_pos[fqt_long_metadata_blanked_pos$`row ID` %in% names(which(table(fqt_long_metadata_blanked_pos$`row ID`) > 2)), ]
+
+
+# Filter newly produced DOM (three the XIC peak area relative to the ambient water)
+# Also remove acetamides
+
+
+produced_DOM_ids_pos <- fqt_long_metadata_blanked_no_transient_pos %>%
+  group_by(`row ID`,ATTRIBUTE_sample_date) %>% 
+  filter(peak_area < 3*peak_area[ATTRIBUTE_blade == 0]) %>% 
+  pull(`row ID`)
+
+
+fqt_long_metadata_blanked_no_transient_produced_DOM_pos <- fqt_long_metadata_blanked_no_transient_pos %>% 
+  filter(! `row ID` %in% produced_DOM_ids_pos) %>% 
+  filter(ATTRIBUTE_source == "Kelp")
+
+
+
+```
+
+# Merge filtered quant table with canopus compounds class 
+
+```{r}
+
+canopus_formula_class_pos <- canopus_formula_class_pos %>% 
+  mutate('row ID' = mappingFeatureId) %>% 
+  select(`row ID`, molecularFormula,`ClassyFire#superclass`, `ClassyFire#class`,`ClassyFire#subclass`, `ClassyFire#most specific class`, `ClassyFire#class Probability`, `ClassyFire#most specific class Probability`)
+
+
+canopus_formula_class_pos_high_class_score <- canopus_formula_class_pos %>% 
+  select(-`ClassyFire#class Probability`)
+
+#filter(`ClassyFire#class Probability` >= 0.8) %>% 
+
+fqt_class_metadata_long_pos <- merge(fqt_long_metadata_blanked_no_transient_produced_DOM_pos, canopus_formula_class_pos_high_class_score, by = "row ID")
+
+length(unique(fqt_class_metadata_long_pos$`row ID`)) #5580 exudate features
+
+```
+
+# Create a read table equivalent to 16s, 
+
+
+```{r}
+
+
+fqt_class_metadata_read_table_pos <- fqt_class_metadata_long_pos %>% 
+  pivot_wider(names_from = filename, values_from = peak_area) 
+
+
+
+fqt_class_metadata_read_table_pos <- fqt_class_metadata_read_table_pos %>%
+          mutate(across(19:63, ~replace_na(.x, 0)))
+
+
+
+# Make rownames and then select only peakareas to calculate relative abundances 
+
+fqt_class_metadata_read_table_pos <- fqt_class_metadata_read_table_pos %>% 
+  mutate(rownumber = 1:nrow(fqt_class_metadata_read_table_pos))
+
+fqt_class_metadata_read_table_RA_pos <- fqt_class_metadata_read_table_pos %>%
+  column_to_rownames(var = "rownumber") %>% 
+  select(`240417_B2.mzML`:`240616_B5.mzML`)
+
+# %>% # select(-c(`230823_B1.mzML`,`230823_B2.mzML`,`230823_B3.mzML`))
+  
+# Calculate relative peak areas 
+
+fqt_class_metadata_read_table_RA_pos <- as.data.frame(lapply(fqt_class_metadata_read_table_RA_pos[1:45], function(x) {(x/ sum(x))}))
+
+
+fqt_class_metadata_read_table_RA_rowname_column_pos <- fqt_class_metadata_read_table_RA_pos %>% 
+  rownames_to_column(var = "rownumber")
+
+# Create complimentary metadata file for relative abundnace dataframe to be merged with 
+
+fqt_class_metadata_read_table_rownumber_pos <- fqt_class_metadata_read_table_pos %>% 
+  select(`row ID`:`ClassyFire#most specific class`, rownumber)
+
+
+# Create metadata file wit relative abundnaces of each sample compounds class 
+
+fqt_class_metadata_RA_pos <- merge(fqt_class_metadata_read_table_rownumber_pos,fqt_class_metadata_read_table_RA_rowname_column_pos, by = "rownumber")
+
+fqt_class_metadata_RA_pos <- fqt_class_metadata_RA_pos %>%
+  rename_all(~ gsub("X2", "2", .x))
+
+fqt_class_metadata_RA_pos$smooshedclass <- do.call(paste, c(fqt_class_metadata_RA_pos[c("ClassyFire#superclass", "ClassyFire#class", "ClassyFire#subclass", "ClassyFire#most specific class")], sep="_"))
+
+
+
+```
+
+# Prepare data for PCoA using features ids instead of grouped specific class
+
+```{r}
+fqt_class_metadata_RA_pos_PCOA_1 <- fqt_class_metadata_RA_pos %>% 
+  select(`row ID`, `240417_B2.mzML`:`240616_B5.mzML`)
+
+fqt_class_metadata_RA_pos_PCOA_2  <- fqt_class_metadata_RA_pos_PCOA_1 %>% 
+pivot_longer(!c(`row ID`), names_to = "filename", values_to = "relative_peak_area")
+ 
+fqt_class_metadata_RA_pos_PCOA_3 <- merge(metadata_pos,fqt_class_metadata_RA_pos_PCOA_2, by = "filename")
+
+fqt_class_metadata_RA_pos_PCOA_4 <- fqt_class_metadata_RA_pos_PCOA_3 %>% 
+  select(ATTRIBUTE_sample_date, ATTRIBUTE_phys_state, ATTRIBUTE_season, ATTRIBUTE_age_d, ATTRIBUTE_blade, `row ID`, relative_peak_area) %>% 
+  unique()
+
+
+fqt_class_metadata_RA_pos_PCOA_5 <- fqt_class_metadata_RA_pos_PCOA_4 %>% 
+  pivot_wider(names_from = `row ID`, values_from = relative_peak_area, values_fn = max)
+
+fqt_class_metadata_RA_pos_PCOA_40463 <- fqt_class_metadata_RA_pos_PCOA_5 %>% 
+  select(`40463`, ATTRIBUTE_age_d, ATTRIBUTE_season)
+
+
+fqt_class_metadata_RA_pos_PCOA_5 <- fqt_class_metadata_RA_pos_PCOA_5[, colSums(fqt_class_metadata_RA_pos_PCOA_5 != 0) > 0]
+
+pos_ft_metab_numeric <- fqt_class_metadata_RA_pos_PCOA_5[1:45,6:7350]
+
+
+pos_ft_metab_numeric_angtransformed <- asin(sqrt(pos_ft_metab_numeric))
+
+pos_metab_numeric_ft_z_scored <- as.data.frame(scale(pos_ft_metab_numeric_angtransformed, center = FALSE, scale = TRUE))
+
+
+bray_dist_matrix_ft_pos <- vegdist(pos_metab_numeric_ft_z_scored, method = "bray")
+
+PCoA_metab_ft_pos  <-  cmdscale(bray_dist_matrix_ft_pos)
+
+str(PCoA_metab_ft_pos)
+
+head(PCoA_metab_ft_pos)
+
+colnames(PCoA_metab_ft_pos) <- c("pcoa1", "pcoa2") 
+
+PCoA_metab_ft_pos <- PCoA_metab_ft_pos %>%  
+  as_tibble(rownames = "samples")
+
+# Getting eigenvalues 
+
+PCoA_metab_ft_eig_pos  <-  cmdscale(bray_dist_matrix_ft_pos, eig = TRUE, add = TRUE)
+
+positions_ft_pos <- PCoA_metab_ft_eig_pos$points
+
+head(positions_ft_pos)
+
+colnames(PCoA_metab_ft_eig_pos$points) <- c("pcoa1", "pcoa2") 
+
+100* PCoA_metab_ft_eig_pos$eig / sum(PCoA_metab_ft_eig_pos$eig)
+
+
+# Merge with metadata 
+
+fqt_class_metadata_RA_pos_PCOA_5_rownames_pos <- fqt_class_metadata_RA_pos_PCOA_5 %>% 
+  mutate(samples = 1:45)
+
+PCoA_NEG_metab_metadata_ft_pos <- merge(PCoA_metab_ft_pos, fqt_class_metadata_RA_pos_PCOA_5_rownames_pos, by = "samples")
+
+
+#Plot PCo 1 and PCo 2 by developmental stage
+
+pcoa_pos_plot <- PCoA_NEG_metab_metadata_ft_pos %>% 
+  ggplot(aes(x = pcoa1,  y = pcoa2)) +
+  geom_point(aes(shape = ATTRIBUTE_season, fill = ATTRIBUTE_phys_state),
+             size = 5,
+             alpha = 0.7) +
+  scale_color_manual(values = c("black", "black")) +
+  scale_fill_manual(values = c("#06558B", "#AA4613")) +
+  scale_shape_manual(values = c(21,24)) +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) + 
+  labs(x = "PCo 1 (21.5%)",
+       y = "PCo 2 (16.1%)") +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        legend.key = element_rect(fill = "white",color = NA),
+        legend.text = element_text(size = 20),
+        legend.position = "right",
+        legend.title = element_blank(),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Helvetica")) +
+  stat_ellipse(aes(x = pcoa1,  
+                   y = pcoa2, 
+                   color = ATTRIBUTE_phys_state,
+                   fill = ATTRIBUTE_phys_state),
+               geom = "polygon", alpha = 0.2,
+               level = 0.95) +
+  guides(shape = guide_legend(override.aes = list(size = 5)))
+
+
+# Permanova
+
+
+# Variance stabilize the sample centric metabolites relative adundance data
+
+POS_metab_c_4_permanova_ft <- as.data.frame(scale(asin(sqrt(fqt_class_metadata_RA_pos_PCOA_5[1:45,6:7350])), center = FALSE, scale = TRUE))
+  
+
+# PERMANOVA of differences in metabolite composition by physiological state
+
+
+POS_metab_phys_state_adonis_ft <- adonis2(POS_metab_c_4_permanova_ft~ATTRIBUTE_phys_state, data = fqt_class_metadata_RA_pos_PCOA_5[1:45,], method = "bray")
+
+POS_metab_phys_state_adonis_ft # R2 = 0.13 p = 0.001 F = 6.24
+
+
+# PERMANOVA of differences in metabolite composition by season
+
+
+POS_metab_season_adonis_ft <- adonis2(POS_metab_c_4_permanova_ft~ATTRIBUTE_season, data = fqt_class_metadata_RA_pos_PCOA_5[1:45,], method = "bray")
+
+POS_metab_season_adonis_ft # R2 = 0.11 p = 0.001 F = 5.5
+
+
+# Run betadisper to measure if variance between physiolgical stage is sig different
+
+bd_phys_state_pos <- betadisper(bray_dist_matrix_ft_pos, fqt_class_metadata_RA_pos_PCOA_5$ATTRIBUTE_phys_state)
+
+bd_phys_state_pos
+
+permutest(bd_phys_state_pos) # P = 0.03 significantly different variance between season
+
+
+# Run betadisper to measure if variance between season is sig different
+
+bd_season_pos <- betadisper(bray_dist_matrix_ft_pos, fqt_class_metadata_RA_pos_PCOA_5$ATTRIBUTE_season)
+
+bd_season_pos
+
+permutest(bd_season_pos) # P = 0.054, not significantly different variance between season
+
+
+
+
+```
+
+
+# Combine high-score SIRIUS forumlas with dataset
+
+
+```{r}
+
+SIRIUS_formulas_POS <- SIRIUS_formula_highscore_POS %>% 
+  mutate('row ID' = mappingFeatureId) %>% 
+  select(`row ID`, molecularFormula, SiriusScoreNormalized)
+
+
+fqt_class_metadata_formula_POS <- merge(SIRIUS_formulas_POS, fqt_class_metadata_long_pos, by = 'row ID')
+
+fqt_class_metadata_formula_POS <- fqt_class_metadata_formula_POS %>% 
+  select(-molecularFormula.y) %>% 
+  mutate(molecularFormula = molecularFormula.x) %>% 
+  select(-molecularFormula.x)
+
+```
+
+## Seperate out molecular fomrula into elements and ratios 
+
+
+```{r}
+
+library(CHNOSZ)
+
+formulas_vector_POS <- unique(fqt_class_metadata_formula_POS$molecularFormula)
+
+
+formulas_POS <- makeup(formulas_vector_POS, count.zero = TRUE)
+
+df_POS <- data.frame(matrix(unlist(formulas_POS), nrow=length(formulas_POS), byrow=TRUE), stringsAsFactors=FALSE)
+
+element_column_names <- c("As","B","Br","C","Cl","F","H","I","N","O","P","S","Se","Si")
+
+colnames(df_POS) <- element_column_names
+
+df_stoichiometry_molecular_formulas_POS <- df_POS %>% 
+  mutate(molecularFormula = formulas_vector_POS) %>% 
+  distinct()
+
+
+```
+
+## Merge new Formula dataframs with parsed elements and stoichiometry with metadata 
+
+```{r}
+
+fqt_class_metadata_formula_stoichiometry_POS <- merge(fqt_class_metadata_formula_POS, df_stoichiometry_molecular_formulas_POS, by = "molecularFormula")
+
+fqt_class_metadata_formula_stoichiometry_unique_POS <- fqt_class_metadata_formula_stoichiometry_POS %>%
+  distinct() %>% 
+  filter(ATTRIBUTE_sample_date != "9/1/24")
+
+
+write_csv(fqt_class_metadata_formula_stoichiometry_unique_POS, "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Data/metabolites/POS/fqt_class_metadata_formula_stoichiometry_unique_POS.csv")
+
+fqt_class_metadata_formula_stoichiometry_unique_POS <- read_csv(here("Data", "metabolites", "POS","fqt_class_metadata_formula_stoichiometry_unique_POS.csv"))
+
+
+```
+
+## Calculate weighted C:N stoichiometries
+
+```{r}
+
+molecular_stoichiometryCN_POS <- fqt_class_metadata_formula_stoichiometry_unique_POS %>% 
+  group_by(ATTRIBUTE_season, ATTRIBUTE_blade, ATTRIBUTE_age_d) %>% 
+  mutate(weighted_CN = (sum(C*peak_area))/(sum(N*peak_area))) %>% 
+  select(filename, ATTRIBUTE_season, ATTRIBUTE_tissue_CN, ATTRIBUTE_age_d, ATTRIBUTE_blade, ATTRIBUTE_phys_state, weighted_CN) %>% 
+  unique()
+
+molecular_stoichiometryCN_POS$mode <- "Positive"
+
+write_csv(molecular_stoichiometryCN_POS, "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Data/metabolites/POS/metabolite_weighted_CN_POS.csv")
+
+molecular_stoichiometryCN_POS <- read_csv(here("Data", "metabolites", "POS","metabolite_weighted_CN_POS.csv"))
+
+```
+
+## Plot weighted stoichiometries over time between seasons 
+
+```{r}
+
+exo_CN_tissue_CN_pos_p <- molecular_stoichiometryCN_POS %>% 
+  ggplot(aes(x = ATTRIBUTE_tissue_CN, y = weighted_CN, shape = ATTRIBUTE_season, color = ATTRIBUTE_age_d)) +
+  geom_point(size = 4) +
+  geom_smooth(method = "lm",se = F, color = "black", size = 1) +
+  labs(x = "Tissue Stoichiometry (C:N)",
+       y = "Exometabolite Stoichiometry (C:N)",
+      color = "Age (d)",
+      shape = NULL) +
+  scico::scale_color_scico(palette = "vik", breaks = c(0,25,50,75,100)) +
+  coord_cartesian(expand = c(0,0)) +
+ scale_y_continuous(breaks = c(0,5,10,15,20,25,30), limits = c(0,30)) +
+  scale_x_continuous(breaks = c(0,5,10,15,20,25,30,35,40,45), limits = c(0,45)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "white"),
+        legend.key = element_rect(fill = "white", color = NA),
+        legend.text = element_text(size = 15),
+        legend.key.height = unit(0.4, "inch"),
+        legend.key.width = unit(0.2, "inch"),
+        legend.title = element_text(size = 20),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Times")) +
+  guides(shape = guide_legend(override.aes = list(size = 5)))
+
+
+mature_CN_p_pos <- molecular_stoichiometryCN_POS %>% 
+  filter(ATTRIBUTE_phys_state == "Mature") %>% 
+  ggplot(aes(x = ATTRIBUTE_season, y = weighted_CN)) +
+  geom_boxplot(aes(x = ATTRIBUTE_season, y = weighted_CN)) +
+  geom_point(aes(x = ATTRIBUTE_season, y = weighted_CN), 
+             position = position_jitterdodge(0.3)) +
+  scale_y_continuous(breaks = c(5,10,15,20,25,30), limits = c(5,20)) +
+ labs(x = "",
+       y = "Exometabolite C:N") +
+        theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "white"),
+        legend.key = element_blank(),
+        legend.text = element_text(size = 15),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_blank(),
+        axis.text.y = element_text(size = 20, color = "black"),
+        axis.text.x = element_text(size = 24, color = "black"),
+        axis.title = element_text(size = 24),
+        text = element_text(family = "Times")) 
+
+
+
+# T-test Mature kelp Exudate CN
+
+molecular_stoichiometryCN_mature_pos <- molecular_stoichiometryCN_POS %>% 
+  filter(ATTRIBUTE_phys_state == "Mature")
+
+## Test for Normality
+
+
+with(molecular_stoichiometryCN_mature_pos, shapiro.test(weighted_CN[ATTRIBUTE_season == "Spring"])) # p = 0.09 normal
+
+with(molecular_stoichiometryCN_mature_pos, shapiro.test(weighted_CN[ATTRIBUTE_season == "Summer"])) # p = 0.02 normal
+
+# Test for equal variances 
+
+ftest.molecular_stoichiometryCN_mature_pos <- var.test(weighted_CN ~ ATTRIBUTE_season, data = molecular_stoichiometryCN_mature_pos)
+
+# F = 0.26845, num df = 8, denom df = 17, p-value = 0.02 variances arent equal equal
+
+## Use Wilcox t.test (unpaired so basically Mann Whitnet U) 
+
+matureCN.wilcox.test_pos <- wilcox.test(molecular_stoichiometryCN_mature_pos$weighted_CN ~ molecular_stoichiometryCN_mature_pos$ATTRIBUTE_season, alternative = "less")
+
+# W = 84 p = 0.57, CN of mature exudates is not signif lowere in the spring than summer
+
+matureCN.wilcox.test_pos
+
+
+# Run model II linear regressions between C:N of exudates and C:N of tissue 
+
+molecular_stoichiometryCN_POS_spring <- molecular_stoichiometryCN_POS %>% 
+  filter(ATTRIBUTE_season == "Spring")
+
+spring_pos_CNexo_CN_tissue_lm2 <- lmodel2(data = molecular_stoichiometryCN_POS_spring,
+                                          weighted_CN~ATTRIBUTE_tissue_CN)
+
+spring_pos_CNexo_CN_tissue_lm2 #R2 = 0.87, p < 0.001, spring ESI+
+
+molecular_stoichiometryCN_POS_summer <- molecular_stoichiometryCN_POS %>% 
+  filter(ATTRIBUTE_season == "Summer")
+
+summer_pos_CNexo_CN_tissue_lm2 <- lmodel2(data = molecular_stoichiometryCN_POS_summer,
+                                          weighted_CN~ATTRIBUTE_tissue_CN)
+
+summer_pos_CNexo_CN_tissue_lm2 #R2 = 0.34, p < 0.001, summer ESI+
+
+
+```
+
+## Calculate NOSC 
+
+```{r}
+
+molecular_stoichiometry_NOSC_POS <- fqt_class_metadata_formula_stoichiometry_unique_POS %>% 
+  mutate(NOSC = (-((4*C + H - 3*N - 2*O + 5*P - 2*S)/C)+4)) %>% 
+  group_by(ATTRIBUTE_season, ATTRIBUTE_blade, ATTRIBUTE_age_d) %>% 
+  mutate(weighted_NOSC = (sum(NOSC*peak_area))/(sum(peak_area))) %>% 
+  select(filename, ATTRIBUTE_season, ATTRIBUTE_tissue_CN, ATTRIBUTE_age_d, ATTRIBUTE_blade, ATTRIBUTE_phys_state, weighted_NOSC) %>% 
+  unique()
+
+molecular_stoichiometry_NOSC_POS %>% 
+  ggplot(aes(x = ATTRIBUTE_age_d, y = weighted_NOSC, colour = ATTRIBUTE_season)) +
+  geom_point(size = 4) +
+  labs(x = "Age_d",
+       y = "Exudate NOSC") +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 15),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 15),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Times")) 
+
+
+
+```
+
+## Carbon to Halogen Ratios 
+
+```{r}
+
+molecular_stoichiometryCBr_POS <- fqt_class_metadata_formula_stoichiometry_unique_POS %>% 
+  group_by(ATTRIBUTE_season, ATTRIBUTE_blade, ATTRIBUTE_age_d) %>% 
+  mutate(weighted_BrC = (sum(Br*peak_area))/((sum(C*peak_area)))) %>% 
+  select(filename, ATTRIBUTE_season, ATTRIBUTE_tissue_CN, ATTRIBUTE_age_d, ATTRIBUTE_blade, ATTRIBUTE_phys_state, weighted_BrC) %>% 
+  unique()
+
+molecular_stoichiometryCBr_POS %>% 
+  ggplot(aes(x = ATTRIBUTE_age_d, y = weighted_BrC, colour = ATTRIBUTE_season)) +
+  geom_point(size = 4) +
+  labs(x = "Age_d",
+       y = "Exudate Br:C") +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 15),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 15),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Times")) 
+
+
+
+```
+
+## Peak Areas 
+
+```{r}
+
+blank_features <- fqt_long_metadata %>% 
+  filter(ATTRIBUTE_source == "Blank")
+
+blank_features_v <- blank_features$`row ID`[blank_features$peak_area > 0]
+
+fqt_long_metadata_summarize_pos <- fqt_long_metadata %>% 
+  filter(! `row ID` %in% blank_features_v) %>% 
+  group_by(ATTRIBUTE_source, ATTRIBUTE_season, ATTRIBUTE_blade, ATTRIBUTE_age_d, ATTRIBUTE_DOC_prePPL_uMC) %>% 
+  summarise(total_peak_area = sum(peak_area)) %>% 
+  filter(ATTRIBUTE_season != "September") %>% 
+  filter(ATTRIBUTE_source %in% c("Ambient", "Kelp"))
+
+fqt_long_metadata_summarize_pos %>% 
+  ggplot(aes(x = ATTRIBUTE_blade, y = total_peak_area)) +
+  geom_col() +
+  facet_grid(ATTRIBUTE_season~ATTRIBUTE_age_d)
+
+fqt_long_metadata_summarize_pos %>% 
+  ggplot(aes(x = ATTRIBUTE_DOC_prePPL_uMC, y = total_peak_area)) +
+  geom_point(aes(color = ATTRIBUTE_age_d))
+
+
+```
+
+# Enriched Kelp Exudate Feature Ids for cytoscape
+
+```{r}
+
+pos_fqt_class_metadata_RA_PCOA_feature_list <- fqt_class_metadata_RA_pos_PCOA_4 %>% 
+  select(`row ID`, ATTRIBUTE_phys_state) %>% 
+  unique() %>% 
+  mutate(featureID = `row ID`) 
+
+write_csv(pos_fqt_class_metadata_RA_PCOA_feature_list, "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Data/metabolites/POS/pos_fqt_class_metadata_RA_PCOA_feature_list.csv")
+
+```
+
+# FBMN Results for exudate features w/ subnetwork IDs, merge with Relative peak areas and metadata
+
+```{r}
+
+FBMN_results_pos <- read_csv(here("Data", "metabolites", "POS","FBMN_wNIST_cytoscape_results_POS.csv"))
+
+FBMN_results_simple_pos <- FBMN_results_pos %>% 
+  select(featureID, component, IsSingleNode) %>% 
+  mutate(`row ID` = featureID) %>% 
+  select(-featureID)
+
+
+fqt_class_metadata_RA_long_pos <- fqt_class_metadata_RA_pos %>% 
+  pivot_longer(cols = c(`240417_B2.mzML`:`240616_B5.mzML`),
+               names_to = "filename",
+               values_to = "rpa") 
+
+fqt_class_metadata_RA_long_pos <- fqt_class_metadata_RA_long_pos %>% 
+  unique() %>% 
+  filter(ATTRIBUTE_season %in% c("Spring", "Summer"))
+
+
+fqt_class_metadata_RA_subnetwork_sum_pos <- merge(fqt_class_metadata_RA_long_pos, FBMN_results_simple_pos, by = "row ID") %>% 
+  unique()
+
+
+#fqt_class_metadata_RA_subnetwork_sum_pos <- fqt_class_metadata_RA_subnetwork_sum_pos %>% 
+  filter(!ATTRIBUTE_LC_vial_name %in% c("230823 B1","230823 B2","230823 B3"))
+
+  
+
+fqt_class_metadata_RA_subnetwork_sum2_pos <- fqt_class_metadata_RA_subnetwork_sum_pos %>% 
+  group_by(component, ATTRIBUTE_season, ATTRIBUTE_phys_state, ATTRIBUTE_blade, ATTRIBUTE_age_d) %>% 
+  summarize(subnetwork_rpa = sum(rpa)) %>% 
+  ungroup() %>% 
+  unique()
+
+  
+# Wilcox paired test, test if sub networks are significantly higher or lower between developmental stages
+
+
+subnetwork_RA_phys_state_wilcox_test_pos <- fqt_class_metadata_RA_subnetwork_sum2_pos %>% 
+  filter(ATTRIBUTE_season != "September") %>% 
+  select(component, ATTRIBUTE_phys_state, subnetwork_rpa) %>% 
+  nest(data = c(ATTRIBUTE_phys_state, subnetwork_rpa)) %>% 
+  mutate(model = map(data, ~wilcox.test(subnetwork_rpa ~ ATTRIBUTE_phys_state, .)), 
+         tidy = map(model, broom::tidy)) %>% 
+  select(component, tidy) %>% 
+  unnest(tidy) %>% 
+  filter(p.value != "NA") %>% 
+  mutate(adjusted_p.value = p.adjust(p.value, method = "BH")) %>% 
+  filter(adjusted_p.value != "NaN")
+
+
+# How many sub networks are significant 
+
+length(subnetwork_RA_phys_state_wilcox_test_pos$component[subnetwork_RA_phys_state_wilcox_test_pos$adjusted_p.value < 0.05]) # 174 significant
+
+# How many subnetworks in total 
+
+length(subnetwork_RA_phys_state_wilcox_test_pos$component) # 977 total
+
+
+subnetwork_RA_phys_state_wilcox_sig_pos <- subnetwork_RA_phys_state_wilcox_test_pos %>% 
+  filter(adjusted_p.value < 0.05)
+
+
+subnetwork_RA_phys_state_wilcox_sig_compounds_pos <- merge(subnetwork_RA_phys_state_wilcox_sig_pos, fqt_class_metadata_RA_subnetwork_sum_consensus_class, by = "component")
+
+
+
+# Wilcox, test if sub networks are significantly higher or lower between seasons
+
+
+subnetwork_RA_season_wilcox_test_pos <- fqt_class_metadata_RA_subnetwork_sum2_pos %>% 
+  filter(ATTRIBUTE_season != "September") %>% 
+  select(component, ATTRIBUTE_season, subnetwork_rpa) %>% 
+  nest(data = c(ATTRIBUTE_season, subnetwork_rpa)) %>% 
+  mutate(model = map(data, ~wilcox.test(subnetwork_rpa ~ ATTRIBUTE_season, .)), 
+         tidy = map(model, broom::tidy)) %>% 
+  select(component, tidy) %>% 
+  unnest(tidy) %>% 
+  filter(p.value != "NA") %>% 
+  mutate(adjusted_p.value = p.adjust(p.value, method = "BH")) %>% 
+  filter(adjusted_p.value != "NaN")
+
+
+# How many sub networks are significant 
+
+length(subnetwork_RA_season_wilcox_test_pos$component[subnetwork_RA_season_wilcox_test_pos$adjusted_p.value < 0.05]) # 195 significant
+
+# How many subnetworks in total 
+
+length(subnetwork_RA_season_wilcox_test_pos$component) # 635 total
+
+
+
+```
+
+
+# Plot amino acids, peptides, analogues and halogenated aromatics, phenols, aryls, benzenoids
+
+
+```{r}
+
+AAPA_p_pos <- fqt_class_metadata_RA_subnetwork_sum_pos %>% 
+  filter(`ClassyFire#subclass` == "Amino acids, peptides, and analogues", 
+         ATTRIBUTE_season != "September") %>% 
+  group_by(ATTRIBUTE_age_d, ATTRIBUTE_season, ATTRIBUTE_blade) %>% 
+  summarize(sum_rpa = sum(rpa)) %>% 
+  ungroup() %>% 
+  group_by(ATTRIBUTE_age_d, ATTRIBUTE_season) %>% 
+  mutate(mean_rpa = mean(sum_rpa),
+         sd_rpa = sd(sum_rpa)) %>% 
+  distinct() %>% 
+  ggplot() +
+  geom_point(aes(x = ATTRIBUTE_age_d, y = sum_rpa*100, shape = ATTRIBUTE_season)) +
+  geom_point(aes(x = ATTRIBUTE_age_d, y = mean_rpa*100, shape = ATTRIBUTE_season), size = 4) +
+  geom_line(aes(x = ATTRIBUTE_age_d, y = mean_rpa*100, shape = ATTRIBUTE_season ), size = 0.5) +
+  labs(x = "Age (d)",
+       y = "Amino Acids, Peptides, analogues \n (% RPA)",
+       shape = NULL) +
+  scale_shape_manual(values = c(1,2)) +
+  scale_x_continuous(breaks = c(10,20,30,40,50,60,70,80,90), limits = c(10,90)) +
+  coord_cartesian(expand = c(0,0)) +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white",color = NA),
+        legend.text = element_text(size = 15),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_blank(),
+        legend.position = "right",
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Helvetica")) +
+   annotate("rect", xmin = 10, xmax = 50, ymin = 0, ymax = Inf,
+           alpha = .25,fill = "#06558B")  +
+  annotate("rect", xmin = 50.1, xmax = 90, ymin = 0, ymax = Inf,
+           alpha = .25,fill = "#AA4613") 
+
+
+
+carbohydrates_plot_pos_p <- fqt_class_metadata_RA_subnetwork_sum_pos %>% 
+  filter(`ClassyFire#subclass` == "Aminoxides", 
+         ATTRIBUTE_season != "September") %>% 
+  group_by(ATTRIBUTE_age_d, ATTRIBUTE_season, ATTRIBUTE_blade) %>% 
+  summarize(sum_rpa = sum(rpa)) %>% 
+  ungroup() %>% 
+  group_by(ATTRIBUTE_age_d, ATTRIBUTE_season) %>% 
+  mutate(mean_rpa = mean(sum_rpa),
+         sd_rpa = sd(sum_rpa)) %>% 
+  distinct() %>% 
+  ggplot() +
+  geom_point(aes(x = ATTRIBUTE_age_d, y = sum_rpa*100, shape = ATTRIBUTE_season)) +
+  geom_point(aes(x = ATTRIBUTE_age_d, y = mean_rpa*100, shape = ATTRIBUTE_season), size = 4) +
+  geom_line(aes(x = ATTRIBUTE_age_d, y = mean_rpa*100, shape = ATTRIBUTE_season ), size = 0.5) +
+  scale_x_continuous(breaks = c(10,20,30,40,50,60,70,80,90), limits = c(10,90)) +
+  scale_y_continuous(breaks = c(0,10,20,30,40), limits = c(0,40)) +
+  labs(x = "Age (d)",
+       y = "Diterpenoids (% RPA)",
+       shape = NULL) +
+  coord_cartesian(expand = c(0,0)) +
+  scale_shape_manual(values = c(1,2)) +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white",color = NA),
+        legend.text = element_text(size = 15),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_blank(),
+        legend.position = "right",
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Helvetica")) +
+   annotate("rect", xmin = 10, xmax = 50, ymin = 0, ymax = 40,
+           alpha = .25,fill = "#06558B")  +
+  annotate("rect", xmin = 50.1, xmax = 90, ymin = 0, ymax = 40,
+           alpha = .25,fill = "#AA4613") 
+
+
+
+my_colors <- scico(7, palette = "vik")
+scales::show_col(my_colors)
+
+
+```
+
+# Select subnetworks that are signifcantly different between developmental stage  
+
+```{r}
+
+
+Subnetwork_1773_rpa_pos_p <- fqt_class_metadata_RA_subnetwork_sum_pos %>% 
+  filter(component == 1773) %>% 
+  group_by(ATTRIBUTE_phys_state, ATTRIBUTE_season, ATTRIBUTE_age_d, ATTRIBUTE_blade) %>% 
+  summarize(sum_component = sum(rpa)) %>% 
+  ungroup() %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = ATTRIBUTE_phys_state, y = sum_component*100),
+               outlier.shape = NA) +
+  geom_point(aes(x = ATTRIBUTE_phys_state, y = sum_component*100), 
+             position = position_jitterdodge(0.3)) +
+  scale_y_continuous() +
+  labs(x = "",
+       y = "Subnetwork 1773 (% Peak Area)") +
+        theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "white"),
+        legend.key = element_blank(),
+        legend.text = element_text(size = 8),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_blank(),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.text.x = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Times")) 
+
+
+Subnetwork_691_rpa_pos_p <- fqt_class_metadata_RA_subnetwork_sum_pos %>% 
+  filter(component == 691) %>% 
+  group_by(ATTRIBUTE_phys_state, ATTRIBUTE_season, ATTRIBUTE_age_d, ATTRIBUTE_blade) %>% 
+  summarize(sum_component = sum(rpa)) %>% 
+  ungroup() %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = ATTRIBUTE_phys_state, y = sum_component*100),
+               outlier.shape = NA) +
+  geom_point(aes(x = ATTRIBUTE_phys_state, y = sum_component*100), 
+             position = position_jitterdodge(0.3)) +
+  scale_y_continuous() +
+  scale_fill_manual(values=c("dodgerblue1", "red4")) +
+  labs(x = "",
+       y = "Subnetwork 543 (% Peak Area)") +
+        theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "white"),
+        legend.key = element_blank(),
+        legend.text = element_text(size = 8),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_blank(),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.text.x = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Times")) 
+ 
+Subnetwork_974_rpa_pos_p <- fqt_class_metadata_RA_subnetwork_sum_pos %>% 
+  filter(component == 974) %>% 
+  group_by(ATTRIBUTE_phys_state, ATTRIBUTE_season, ATTRIBUTE_age_d, ATTRIBUTE_blade) %>% 
+  summarize(sum_component = sum(rpa)) %>% 
+  ungroup() %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = ATTRIBUTE_phys_state, y = sum_component*100),
+               outlier.shape = NA) +
+  geom_point(aes(x = ATTRIBUTE_phys_state, y = sum_component*100), 
+             position = position_jitterdodge(0.3)) +
+  scale_y_continuous() +
+  scale_fill_manual(values=c("dodgerblue1", "red4")) +
+  labs(x = "",
+       y = "Subnetwork 974 (% Peak Area)") +
+        theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "white"),
+        legend.key = element_blank(),
+        legend.text = element_text(size = 8),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_blank(),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.text.x = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Times")) 
+
+
+fqt_class_metadata_RA_subnetwork_sum_pos %>% 
+  filter(component == 472) %>% 
+  group_by(ATTRIBUTE_phys_state, ATTRIBUTE_season, ATTRIBUTE_age_d, ATTRIBUTE_blade) %>% 
+  summarize(sum_component = sum(rpa)) %>% 
+  ungroup() %>% 
+  ggplot() + 
+  geom_boxplot(aes(x = ATTRIBUTE_phys_state, y = sum_component*100),
+               outlier.shape = NA) +
+  geom_point(aes(x = ATTRIBUTE_phys_state, y = sum_component*100), 
+             position = position_jitterdodge(0.3)) +
+  scale_y_continuous() +
+  labs(x = "",
+       y = "Subnetwork 472 (% Peak Area)") +
+        theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "white"),
+        legend.key = element_blank(),
+        legend.text = element_text(size = 8),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_blank(),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.text.x = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Times")) 
+
+```
+
+
+
+
+# Subnetwork relative bundance across age stacked bar plot 
+
+```{r}
+
+library(reshape2)
+
+# Identify subnetworks with an average of 1% in at least one age group 
+
+sig_subnetworks_one_percent_pos <- fqt_class_metadata_RA_subnetwork_sum2_pos %>% 
+  group_by(ATTRIBUTE_age_d, component) %>% 
+  summarise(avg_rpa = mean(subnetwork_rpa), .groups = "drop") %>% 
+  ungroup() %>% 
+  group_by(ATTRIBUTE_age_d, component) %>% 
+  filter(any(avg_rpa > 0.01)) %>% 
+  mutate(component = as.factor(component)) %>% 
+  ungroup() %>% 
+  group_by(component) %>% 
+  filter(ATTRIBUTE_age_d != is.na(ATTRIBUTE_age_d))
+
+sig_subnetworks_one_percent_pos_component <- sig_subnetworks_one_percent_pos$component
+
+# Select subnetworks with more than 1% mean peak area per age 
+
+
+fqt_class_metadata_RA_subnetwork_sum3_pos <- fqt_class_metadata_RA_subnetwork_sum2_pos %>% 
+ filter(component %in% sig_subnetworks_one_percent_pos_component)
+
+
+# Filter subnetworks into a consensus class for the stacked barplot 
+
+
+fqt_class_metadata_RA_subnetwork_sum_consensus_class_pos <- fqt_class_metadata_RA_subnetwork_sum_pos %>% 
+  group_by(component, `ClassyFire#subclass`, `ClassyFire#class`) %>% 
+  summarise(Totalsum = sum(rpa), .groups = 'drop') %>%
+  ungroup() %>% 
+  group_by(component) %>% 
+  slice_max(Totalsum, n = 1, with_ties = FALSE)
+  
+
+fqt_class_metadata_RA_subnetwork_sum3_compounds_classes_pos <- merge(fqt_class_metadata_RA_subnetwork_sum_consensus_class_pos, fqt_class_metadata_RA_subnetwork_sum3_pos, by = "component")
+
+# Merge significance results with the peak area data and subnetwork 
+
+fqt_class_metadata_RA_subnetwork_sum3_compounds_classes_pos <- fqt_class_metadata_RA_subnetwork_sum3_compounds_classes_pos %>% 
+  mutate(significantly_enriched = ifelse(
+    component %in% subnetwork_RA_phys_state_wilcox_sig_pos$component,
+    "bold",
+    "plain"
+  ))
+
+# Create unique identifier with subnetwork ID and consensus class
+  
+fqt_class_metadata_RA_subnetwork_sum3_compounds_classes_pos$com_cla_subcla <- do.call(paste, c(fqt_class_metadata_RA_subnetwork_sum3_compounds_classes_pos[c("component","ClassyFire#class", "ClassyFire#subclass")], sep=";")) 
+  
+fqt_class_metadata_RA_subnetwork_sum3_compounds_classes_pos <- fqt_class_metadata_RA_subnetwork_sum3_compounds_classes_pos %>% 
+  group_by(component) %>% 
+  mutate(prop_16 = sum(subnetwork_rpa[ATTRIBUTE_age_d %in% c(16,30,37, 43)], na.rm= T)/sum(subnetwork_rpa, na.rm=T),
+         ATTRIBUTE_age_d = as.factor(ATTRIBUTE_age_d))
+
+
+# Factor age for stacked bar plot
+
+fqt_class_metadata_RA_subnetwork_sum3_compounds_classes_pos$ATTRIBUTE_age_d <- factor(fqt_class_metadata_RA_subnetwork_sum3_compounds_classes_pos$ATTRIBUTE_age_d, levels = c("16","30","37","43","64","77","78"))
+
+
+
+# Make noramlized stacked barplot showing relative contribution of subnetworks at specific ages
+
+
+norm_bar_plot_component_pos_p <- fqt_class_metadata_RA_subnetwork_sum3_compounds_classes_pos %>%
+    filter(significantly_enriched == "bold") %>% 
+  ggplot(aes(y = reorder(com_cla_subcla, prop_16, decreasing=T),
+                             x = subnetwork_rpa, 
+                             fill = ATTRIBUTE_age_d)) +
+  geom_bar(position = "fill", stat = "identity") +
+  labs(x = "Peak Area Normalized",
+       y = "Subnetwork",
+       fill = "Age (d)") +
+  coord_cartesian(expand = c(0,0)) +
+  scale_fill_manual(values = c("#001260", "#06558B", "#71A7C4", "#EBE5E0","#AA4613","#590007","#590007")) +
+  scale_x_continuous() + 
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white", color = NA),
+        legend.text = element_text(size = 15),
+        legend.position = "none",
+        legend.key.height = unit(1, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 15),
+        axis.text.y = element_text(size = 12, color = "black"),
+        axis.text.x = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Helvetica")) 
+
+
+ggsave("norm_bar_plot_component_pos_p.pdf", plot = norm_bar_plot_component_pos_p, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/HQ Figs Metabolites/", width = 10, height = 15, device='pdf', dpi=250, units = "in")
+  
+
+# Complimentary dotplot showing range of relative peak areas
+
+norm_bar_plot_component_rpa_pos_p <- fqt_class_metadata_RA_subnetwork_sum3_compounds_classes_pos %>% 
+      filter(significantly_enriched == "bold") %>% 
+  ggplot(aes(y = reorder(com_cla_subcla, prop_16, decreasing=T),
+                             x = subnetwork_rpa*100)) +
+  geom_point(aes(fill = ATTRIBUTE_age_d,
+                 shape = ATTRIBUTE_season), 
+             size = 4,
+             alpha = 0.8) +
+  geom_line(color ="black", size = 0.2) +
+  labs(x = "Peak Area (%)",
+       y = "Subnetwork",
+       color = NULL) +
+   scale_shape_manual(values = c(21,24)) +
+    scale_fill_manual(values = c("#001260", "#06558B", "#71A7C4", "#EBE5E0","#AA4613","#590007","#590007")) +
+   scale_x_log10(breaks = c(0,0.001,0.01,0.1,1,10,100),
+                    expand = expansion(mult = c(0, 0.05)),
+                 labels = label_number())+
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white", color = NA),
+        legend.text = element_text(size = 24),
+        legend.position = c(0.8,0.15),
+        legend.title = element_text(size = 15),
+        axis.text.x = element_text(size = 15, color = "black"),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Helvetica")) +
+   scale_size(guide = 'none') +
+  guides(shape=guide_legend(override.aes=list(size=4), title = ""),
+         fill = "none")
+
+ggsave("norm_bar_plot_component_rpa_pos_p.pdf", plot = norm_bar_plot_component_rpa_pos_p, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/HQ Figs Metabolites/", width = 10, height = 15, device='pdf', dpi=250, units = "in")
+
+
+
+
+
+
+
+```
+
+
+
+# Van Krevelen Plots
+
+```{r}
+
+molecular_stoichiometry_VanK_pos <- fqt_class_metadata_formula_stoichiometry_unique_POS %>% 
+  mutate(HC = (H*peak_area)/(C*peak_area),
+         OC = (O*peak_area)/(C*peak_area)) %>% 
+  filter(HC != "NaN",
+         OC != "NaN")
+ 
+
+VanKrev_pos_p <- molecular_stoichiometry_VanK_pos %>% 
+  ggplot(aes(x = OC, HC, colour = ATTRIBUTE_phys_state)) +
+  geom_point(aes(size = peak_area, shape = ATTRIBUTE_season)) +
+  labs(x = "O:C",
+       y = "H:C",
+       color = "") +
+  scale_color_manual(values = c("grey","orangered")) +
+  scale_size_continuous(range  = c(0.1, 15), 
+                        limits = c(5e4, 5e7), 
+                        breaks = c(5e4,5e5,5e6,5e7)) +
+  scale_x_continuous(limits = c(0,1), breaks = c(0,0.2,0.4,0.6,0.8,1.0)) +
+  scale_y_continuous(limits = c(0,2.5), breaks = c(0,0.5,1.0,1.5,2.0,2.5)) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white", color = NA),
+        legend.text = element_text(size = 15),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 15),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Helvetica")) +
+  scale_size(guide = 'none') +
+  guides(color=guide_legend(override.aes=list(size=4), title = "Developmental Stage"), shape=guide_legend(override.aes=list(size=4), title = "Season"))
+
+
+
+
+
+```
+
+# Proportion of formulas
+
+```{r}
+
+
+formulas_simple_POS <- fqt_class_metadata_formula_stoichiometry_unique_POS %>%
+   mutate(isCHON = case_when(
+      C>0 & H >0 & O >0 & N > 0 & peak_area > 0 ~ TRUE,
+      TRUE ~ FALSE
+   )) %>% 
+  mutate(isCHOBr = case_when(
+    C > 0 & H >0 & O > 0 & Br > 0 & peak_area > 0 ~ TRUE,
+    TRUE ~ FALSE
+  )) %>% 
+  mutate(isCHO = case_when(
+    As < 1 & B < 1 & Br < 1 & C > 0 & Cl < 1 & F < 1 & H > 0 & I < 1 & N < 1 & O > 0 & P < 1 & S < 1 & Se < 1 & Si < 1 & peak_area > 0 ~ TRUE,
+    TRUE ~ FALSE
+  )) %>% 
+  mutate(isCHOS = case_when(
+    C > 0 & H >0 & O > 0 & S > 0 & peak_area > 0 ~ TRUE,
+    TRUE ~ FALSE)) %>% 
+  filter(peak_area > 0) %>% 
+  group_by(ATTRIBUTE_season, ATTRIBUTE_phys_state, ATTRIBUTE_blade, ATTRIBUTE_age_d) %>% 
+  summarize(CHO = mean(isCHO, na.rm = TRUE),
+            CHOBr = mean(isCHOBr, na.rm = TRUE),
+            CHON = mean(isCHON, na.rm = TRUE),
+            CHOS = mean(isCHOS, na.rm = TRUE)) %>% 
+  pivot_longer(
+    cols = c(CHO, CHOBr, CHON, CHOS), 
+    names_to = "formula_class",     
+    values_to = "Proportion"      
+  )
+     
+
+formula_p_pos_devstage <- ggboxplot(formulas_simple_POS,
+                   x = "formula_class",
+                  y = "Proportion", 
+                  color = "ATTRIBUTE_phys_state",
+                  shape = "ATTRIBUTE_season",
+                  palette = my_pallet,
+                  add = "jitter") +
+  stat_compare_means(aes(x = formula_class, 
+                   y = Proportion,
+                   group = ATTRIBUTE_season),
+                   label = "p.signif",
+                   label.y = c(0.5, 0.4, 0.9, 0.5),
+                   size = 6) +
+  labs(x = "",
+       y = "Proportion of Formulas (%)",
+       fill = "") + 
+  facet_wrap( ~ ATTRIBUTE_phys_state) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white",color = NA),
+        legend.text = element_text(size = 15),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.position = "right",
+        legend.title = element_blank(),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Helvetica")) +
+  coord_cartesian(expand = c(0,1)) +
+  scale_y_continuous(limits = c(0,1), breaks = c(0,0.2,0.4,0.6,0.8,1.0)) +
+  guides()
+
+
+formula_p_season <- ggboxplot(formulas_simple_POS,
+                  x = "formula_class",
+                  y = "Proportion", 
+                  color = "ATTRIBUTE_phys_state",
+                  shape = "ATTRIBUTE_season",
+                  palette = my_pallet,
+                  add = "jitter") +
+  stat_compare_means(aes(x = formula_class, 
+                   y = Proportion,
+                   group = ATTRIBUTE_phys_state),
+                   label = "p.signif",
+                   label.y = c(0.5, 0.4, 0.9, 0.5),
+                   size = 6) +
+  labs(x = "",
+       y = "Proportion of Formulas (%)",
+       fill = "") + 
+  facet_wrap( ~ ATTRIBUTE_season) +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white",color = NA),
+        legend.text = element_text(size = 15),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.position = "right",
+        legend.title = element_blank(),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Helvetica")) +
+  coord_cartesian(expand = c(0,1)) +
+  scale_y_continuous(limits = c(0,1), breaks = c(0,0.2,0.4,0.6,0.8,1.0)) +
+  guides()
+
+
+
+     
+formula_p_pos <- ggboxplot(formulas_simple_POS,
+                   x = "formula_class",
+                  y = "Proportion", 
+                  color = "ATTRIBUTE_phys_state",
+                  palette = my_pallet,
+                  add = "jitter") +
+  stat_compare_means(aes(x = formula_class, 
+                   y = Proportion,
+                   group = ATTRIBUTE_phys_state),
+                   label = "p.signif",
+                   label.y = c(0.5, 0.4, 0.9, 0.5),
+                   size = 6) +
+  labs(x = "",
+       y = "Proportion of Formulas (%)",
+       fill = "") +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white",color = NA),
+        legend.text = element_text(size = 15),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.position = "right",
+        legend.title = element_blank(),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Helvetica")) +
+  coord_cartesian(expand = c(0,1)) +
+  scale_y_continuous(limits = c(0,1), breaks = c(0,0.2,0.4,0.6,0.8,1.0)) +
+  guides()
+
+# Sumamry stats 
+
+summary_stoichiometry_table_POS <- formulas_simple_POS %>% 
+  group_by(formula_class, ATTRIBUTE_phys_state) %>% 
+  summarize(min_p = min(Proportion),
+            max_p = max(Proportion),
+            mean_p = mean(Proportion),
+            sd_p = sd(Proportion))
+     
+     
+
+```
+
+
+# Old Analysis
+
+## Aggregate relative peak areas by most specific class
+
+```{r}
+
+agg_by_mostspecificclass_pos <- aggregate(fqt_class_metadata_RA_pos[,19:60], 
+                        by = list(fqt_class_metadata_RA_pos$smooshedclass), 
+                        FUN = sum) 
+
+
+agg_by_mostspecificclass_pos <- agg_by_mostspecificclass_pos %>% 
+  mutate(smooshedclass = Group.1) %>% 
+  select(-Group.1) %>% 
+  separate(smooshedclass, into = c("super_class", "class", "subclass", "most_specific_class"), sep = "_")
+
+
+
+
+```
+
+## Merge specific class aggreagated dataframe with metadata 
+
+```{r}
+
+agg_by_mostspecificclass_long_pos <- agg_by_mostspecificclass_pos %>% 
+  pivot_longer(!c(super_class, class, subclass, most_specific_class), names_to = "filename", values_to = "relative_peak_area")
+
+
+agg_specific_class_w_metadata_pos <- merge(metadata_pos,agg_by_mostspecificclass_long_pos, by = "filename")
+
+# Remove the 9/1/24 sample: this was not part of the experiment 
+
+crude_extract_etAoc_pos <-  agg_specific_class_w_metadata_pos %>% 
+  filter(ATTRIBUTE_sample_date == "9/1/24")
+
+agg_specific_class_w_metadata_pos <- agg_specific_class_w_metadata_pos %>% 
+  filter(ATTRIBUTE_sample_date != "9/1/24")
+
+
+```
+
+## Summarize by class and subclass for stacked barplot
+
+```{r}
+
+# Agg and sum by class level
+
+agg_metadata_class_level_pos <- agg_specific_class_w_metadata_pos %>% 
+  group_by(ATTRIBUTE_sample_date, ATTRIBUTE_age_d, ATTRIBUTE_season, ATTRIBUTE_blade, class,subclass) %>% 
+  summarize(class_rpa = sum(relative_peak_area),
+            ATTRIBUTE_phys_state = ATTRIBUTE_phys_state,
+            super_class = super_class) %>% 
+  filter(class_rpa > 0.01)
+
+
+
+ agg_metadata_class_level_sum_pos <- agg_metadata_class_level_pos %>% 
+  group_by(ATTRIBUTE_sample_date, ATTRIBUTE_age_d,ATTRIBUTE_season,class) %>% 
+  summarize(mean_pa = mean(class_rpa),
+            sd_pa = sd(class_rpa),
+            ATTRIBUTE_phys_state = ATTRIBUTE_phys_state,
+            super_class = super_class,
+            subclass = subclass) %>% 
+   unique()
+ 
+ 
+# Agg and sum by subclass level
+
+ 
+agg_metadata_subclass_level_pos <- agg_specific_class_w_metadata_pos %>% 
+  group_by(ATTRIBUTE_sample_date, ATTRIBUTE_age_d, ATTRIBUTE_season, ATTRIBUTE_blade,subclass, ATTRIBUTE_phys_state) %>% 
+  summarize(subclass_rpa = sum(relative_peak_area))
+
+agg_metadata_subclass_level_sum_pos <- agg_metadata_subclass_level_pos %>% 
+  group_by(ATTRIBUTE_sample_date, ATTRIBUTE_age_d,subclass) %>% 
+  summarize(mean_pa = mean(subclass_rpa),
+            sd_pa = sd(subclass_rpa),
+            phys_state = ATTRIBUTE_phys_state)
+
+```
+
+
+## Amino acids, peptides, and analogues 
+
+```{r}
+
+agg_metadata_subclass_level_pos <- agg_specific_class_w_metadata_pos %>% 
+  group_by(ATTRIBUTE_sample_date, ATTRIBUTE_age_d, ATTRIBUTE_season,ATTRIBUTE_blade, subclass) %>% 
+  summarize(subclass_rpa = sum(relative_peak_area))
+
+agg_metadata_subclass_level_sum_pos <- agg_metadata_subclass_level_pos %>% 
+  group_by(ATTRIBUTE_sample_date, ATTRIBUTE_age_d, ATTRIBUTE_season,subclass) %>% 
+  summarize(mean_pa = mean(subclass_rpa),
+            sd_pa = sd(subclass_rpa))
+
+
+agg_metadata_subclass_level_sum_pos %>% 
+  filter(subclass == "Amino acids, peptides, and analogues") %>% 
+  ggplot(aes(x = ATTRIBUTE_age_d, y = mean_pa, color = ATTRIBUTE_season)) +
+  geom_point(size = 4) +
+  geom_smooth(method = "lm", se = F, color = "black", size = 2) +
+  geom_errorbar(aes(ymin = mean_pa - sd_pa, ymax = mean_pa + sd_pa), width = 0, alpha = 0.5, color = "black") +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 15),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 15),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Times")) 
+
+
+
+```
+
+
+## Diterpenoids
+
+```{r}
+
+agg_metadata_class_level_sum_pos %>% 
+  filter(subclass == "Diterpenoids") %>% 
+  ggplot(aes(x = ATTRIBUTE_age_d, y = mean_pa, color = ATTRIBUTE_season)) +
+  geom_point(size = 4) +
+  geom_smooth(method = "lm", se = F, color = "black", size = 2) +
+  geom_errorbar(aes(ymin = mean_pa - sd_pa, ymax = mean_pa + sd_pa), width = 0, alpha = 0.5, color = "black") +
+  theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 15),
+        legend.key.height = unit(0.5, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        legend.title = element_text(size = 15),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 15),
+        text = element_text(family = "Times")) 
+
+
+
+
+
+```
+
+
+## Tree Plots
+
+```{r}
+
+agg_metadata_class_level_Phys_sum <- agg_metadata_class_level %>% 
+  group_by(ATTRIBUTE_phys_state, class) %>% 
+  summarize(mean_rpa = mean(class_rpa),
+            sd_rpa = sd(class_rpa),
+            ATTRIBUTE_phys_state = ATTRIBUTE_phys_state,
+            super_class = super_class) %>% 
+  unique() %>% 
+  ungroup() %>% 
+  mutate(class = ifelse(class == "NA", super_class, class))
+
+
+
+mature_look <- agg_metadata_class_level_Phys_sum %>% 
+  mutate(class = factor(class)) %>% 
+  filter(ATTRIBUTE_phys_state == "Mature")
+
+my_palette <- colorRampPalette(brewer.pal(10, "Set2"))(10)
+
+png(filename = "treemap_output_mature_POS.png", width = 800, height = 600, units = "px")
+
+agg_metadata_class_level_Phys_sum %>% 
+  mutate(class = factor(class)) %>% 
+  filter(ATTRIBUTE_phys_state == "Mature") %>% 
+  treemap(vColor = "super_class",
+          index= c("super_class","class"),
+          fontcolor.labels = c("transparent", "black"),
+            vSize="mean_rpa",
+            type="categorical",
+          overlap.labels = 1,
+          palette = my_palette,
+          border.col = c("black", "white"),
+          bg.labels = c("transparent"),
+          title = "Mature Exudates",
+          border.lwds = c(2, 2))
+
+dev.off()
+
+## Create treemap of senescent exudates 
+
+png(filename = "treemap_output_senescent_POS.png", width = 800, height = 600, units = "px")
+
+agg_metadata_class_level_Phys_sum %>% 
+  mutate(class = factor(class)) %>% 
+  filter(ATTRIBUTE_phys_state == "Senescent") %>% 
+  treemap(vColor = "super_class",
+          index= c("super_class","class"),
+          fontcolor.labels = c("transparent", "black"),
+            vSize="mean_rpa",
+            type="categorical",
+          overlap.labels = 1,
+          palette = my_palette,
+          border.col = c("black", "white"),
+          bg.labels = c("transparent"),
+          title = "Senescent Exudates",
+          title.legend = "Superclass",
+          border.lwds = c(2, 1))
+
+dev.off()
+
+
+```
+
+## Generate pca or nmds plot for seasons and dev stage using most specific class
+
+```{r}
+
+agg_specific_class_w_metadata_pca_prep_pos <- agg_specific_class_w_metadata_pos %>% 
+  select(ATTRIBUTE_sample_date, ATTRIBUTE_phys_state, ATTRIBUTE_season, ATTRIBUTE_age_d, ATTRIBUTE_blade, most_specific_class, relative_peak_area) 
+
+  
+agg_specific_class_w_metadata_pca_shape_pos <- agg_specific_class_w_metadata_pca_prep_pos %>% 
+  spread(key = most_specific_class, value = relative_peak_area)
+
+
+
+agg_specific_class_w_metadata_pca_shape_pos <- agg_specific_class_w_metadata_pca_shape_pos[, colSums(agg_specific_class_w_metadata_pca_shape_pos != 0) > 0]
+
+
+pos_metab_numeric <- agg_specific_class_w_metadata_pca_shape_pos[1:42,6:259]
+
+
+pos_metab_numeric_angtransformed <- asin(sqrt(pos_metab_numeric))
+
+#pos_metab_numeric_z_scored <- as.data.frame(scale(pos_metab_numeric_angtransformed, center = TRUE, scale = TRUE))
+
+sugpos_metab.pca1 <- prcomp(pos_metab_numeric, scale = FALSE)
+
+fviz_eig(sugpos_metab.pca1)
+
+
+summary(sugpos_metab.pca1)
+
+get_eig(sugpos_metab.pca1)
+
+eigenvals(sugpos_metab.pca1)
+
+print(sugpos_metab.pca1)
+
+as.matrix(sugpos_metab.pca1)
+
+var_pos <- get_pca_var(sugpos_metab.pca1)
+
+names(var_pos)
+
+head(var_pos$coord)
+
+var_import_pos <- var_pos$coord
+
+```
+
+## PCA Plot
+
+```{r}
+
+fviz_pca_ind(sugpos_metab.pca1)
+
+pca_plot_pos <- fviz_pca_ind(sugpos_metab.pca1,
+                habillage = agg_specific_class_w_metadata_pca_shape_pos[1:42,]$ATTRIBUTE_phys_state, 
+                addEllipses = TRUE, 
+                ellipse.level = 0.95,
+                label = "none",
+                geom="point", pointsize = 4,
+                 palette = c("grey","orangered")) +
+  labs(title = "", 
+       x = "PC1 (33 %)",
+       y = "PC2 (26 %)") +
+  ggtitle("Positive Mode") +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) + 
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white", color = NA),
+        legend.text = element_text(size = 20),
+        legend.position = "right",
+        legend.title = element_blank(),
+        plot.title = element_text(size = 15),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Helvetica")) +
+  scale_shape_manual(values=c(19,19)) + 
+  guides(shape = guide_legend(override.aes = list(size = 5)))
+
+
+
+ggsave("pca_plot_pos.pdf", plot = pca_plot_pos, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 10, height = 10, device='pdf', dpi=250, units = "in")
+
+
+
+
+```
+
+## PCA Loadings Plot 
+
+```{r}
+
+pca_loadings_plot_pos <- fviz_pca_var(sugpos_metab.pca1,
+                col.var = "contrib",
+                repel = TRUE,
+                axes = c(1,2),
+                select.var = list(contrib = 20)) +
+  labs(title = "", 
+       x = "PC1 (13 %)",
+       y = "PC2 (11 %)") +
+  ggtitle("Positive Mode") +
+  scale_y_continuous(labels = label_number(accuracy = 1)) + 
+  scale_color_gradient2(low="white", mid="blue",
+           high="red", midpoint=0.6, breaks = seq(0.4,1.0, 0.05)) +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.key.height = unit(0.35, "inch"),
+        legend.key.width = unit(0.4, "inch"),
+        plot.margin = margin(1,1,1,1, "cm"),
+        strip.background = element_rect(fill = "white", color = "black"),
+        legend.key = element_rect(fill = "white"),
+        legend.text = element_text(size = 20),
+        legend.position = "right",
+         plot.title = element_text(size = 24),
+        legend.title = element_blank(),
+        axis.text = element_text(size = 30, color = "black"),
+        axis.title = element_text(size = 30),
+        text = element_text(family = "Times"))
+
+
+ggsave("pca_loadings_plot_pos.pdf", plot = pca_loadings_plot_pos, path = "/Users/chanceenglish/Desktop/Lab Shiz/ARPA-e/Giant_Kelp_DOC/Figures/", width = 10, height = 10, device='pdf', dpi=250, units = "in")
+
+
+
+```
+
+
+## Three outliers in the positive mode. In Dimension ther are enriched in acetamides, Trialkylglycerols, Secondary carboxylic acid amides
+
+```{r}
+
+
+agg_specific_class_w_metadata_pca_prep_outliers <- agg_specific_class_w_metadata_pca_prep %>% 
+  filter(most_specific_class %in% c("Trialkylglycerols", "Secondary carboxylic acid amides", "Acetamides"))
+
+
+# contamination of a plasticizer in 8/23/23 Blades 1-3
+
+
+
+```
+
+## Principle COORDINATE Analysis (better than PCA because you can use Bray Curtis which is better for zero inflated data which is common in metabolite/microbiome data) 
+
+```{r}
+
+# Use the sample-centric relative abundance normalized feature table that have been arcsine transformed
+
+
+bray_dist_matrix_pos <- vegdist(pos_metab_numeric_angtransformed, method = "bray")
+
+PCoA_NEG_metab_pos  <-  cmdscale(bray_dist_matrix_pos)
+
+str(PCoA_NEG_metab_pos)
+
+head(PCoA_NEG_metab_pos)
+
+colnames(PCoA_NEG_metab_pos) <- c("pcoa1", "pcoa2") 
+
+PCoA_NEG_metab_pos <- PCoA_NEG_metab_pos %>%  
+  as_tibble(rownames = "samples")
+
+# Getting eigenvalues 
+
+PCoA_NEG_metab_eig_pos  <-  cmdscale(bray_dist_matrix_pos, eig = TRUE, add = TRUE)
+
+positions_pos <- PCoA_NEG_metab_eig_pos$points
+
+head(positions_pos)
+
+colnames(PCoA_NEG_metab_eig_pos$points) <- c("pcoa1", "pcoa2") 
+
+100* PCoA_NEG_metab_eig_pos$eig / sum(PCoA_NEG_metab_eig_pos$eig)
+
+
+# Merge with metadata 
+
+agg_specific_class_w_metadata_pca_shape_rownames_pos <- agg_specific_class_w_metadata_pca_shape_pos %>% 
+  mutate(samples = 1:42)
+
+PCoA_NEG_metab_metadata_pos <- merge(PCoA_NEG_metab_pos, agg_specific_class_w_metadata_pca_shape_rownames_pos, by = "samples")
+
+
+#Plot PCo 1 and PCo 2 by developmental stage
+
+PCoA_NEG_metab_metadata_pos %>% 
+  ggplot(aes(x = pcoa1,  y = pcoa2)) +
+  geom_point(aes(color = ATTRIBUTE_phys_state, shape = ATTRIBUTE_season),
+             size = 5) +
+  scale_color_manual(values = c("grey", "orangered")) +
+  scale_fill_manual(values = c("grey", "orangered")) +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) + 
+  labs(x = "PCo 1 (23.3%)",
+       y = "PCo 2 (15.6%)") +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        legend.key = element_rect(fill = "white",color = NA),
+        legend.text = element_text(size = 20),
+        legend.position = "right",
+        legend.title = element_blank(),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Helvetica")) +
+  stat_ellipse(aes(x = pcoa1,  
+                   y = pcoa2, 
+                   color = ATTRIBUTE_phys_state,
+                   fill = ATTRIBUTE_phys_state),
+               geom = "polygon", alpha = 0.2) +
+  guides(shape = guide_legend(override.aes = list(size = 5)))
+
+
+#Plot PCo 1 and PCo 2 by Season 
+
+PCoA_NEG_metab_metadata_pos %>% 
+  ggplot(aes(x = pcoa1,  y = pcoa2)) +
+  geom_point(aes(color = ATTRIBUTE_season, shape = ATTRIBUTE_phys_state),
+             size = 5) +
+  scale_color_manual(values = c("dodgerblue", "red")) +
+  scale_fill_manual(values = c("dodgerblue", "red")) +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) + 
+  labs(x = "PCo 1 (30.7%)",
+       y = "PCo 2 (11.3%)") +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        legend.key = element_rect(fill = "white",color = NA),
+        legend.text = element_text(size = 20),
+        legend.position = "right",
+        legend.title = element_blank(),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Helvetica")) +
+  stat_ellipse(aes(x = pcoa1,  
+                   y = pcoa2, 
+                   color = ATTRIBUTE_season,
+                   fill = ATTRIBUTE_season),
+               geom = "polygon", alpha = 0.2) +
+  guides(shape = guide_legend(override.aes = list(size = 5)))
+
+
+# Mature Data Only by Season
+
+
+PCoA_NEG_metab_metadata_pos %>% 
+  filter(ATTRIBUTE_phys_state == "Mature") %>% 
+  ggplot(aes(x = pcoa1,  y = pcoa2)) +
+  geom_point(aes(color = ATTRIBUTE_season),
+             size = 5) +
+  scale_color_manual(values = c("grey", "orangered")) +
+  scale_fill_manual(values = c("grey", "orangered")) +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) + 
+  labs(x = "PCo 1 (30.7%)",
+       y = "PCo 2 (11.3%)") +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        legend.key = element_rect(fill = "white",color = NA),
+        legend.text = element_text(size = 20),
+        legend.position = "right",
+        legend.title = element_blank(),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Helvetica")) +
+  stat_ellipse(aes(x = pcoa1,  
+                   y = pcoa2, 
+                   color = ATTRIBUTE_season,
+                   fill = ATTRIBUTE_season),
+               geom = "polygon", alpha = 0.2) +
+  guides(shape = guide_legend(override.aes = list(size = 5)))
+
+
+# Senescent Data Only by Season
+
+PCoA_NEG_metab_metadata_pos %>% 
+  filter(ATTRIBUTE_phys_state == "Senescent") %>% 
+  ggplot(aes(x = pcoa1,  y = pcoa2)) +
+  geom_point(aes(color = ATTRIBUTE_season),
+             size = 5) +
+  scale_color_manual(values = c("grey", "orangered")) +
+  scale_fill_manual(values = c("grey", "orangered")) +
+  scale_y_continuous(labels = label_number(accuracy = 0.1)) + 
+  labs(x = "PCo 1 (30.7%)",
+       y = "PCo 2 (11.3%)") +
+   theme(panel.background = element_rect(fill = "white", color = "black", size = 1.5),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(1,1,1,1, "cm"),
+        legend.key = element_rect(fill = "white",color = NA),
+        legend.text = element_text(size = 20),
+        legend.position = "right",
+        legend.title = element_blank(),
+        axis.text = element_text(size = 15, color = "black"),
+        axis.title = element_text(size = 20),
+        text = element_text(family = "Helvetica")) +
+  stat_ellipse(aes(x = pcoa1,  
+                   y = pcoa2, 
+                   color = ATTRIBUTE_season,
+                   fill = ATTRIBUTE_season),
+               geom = "polygon", alpha = 0.2) +
+  guides(shape = guide_legend(override.aes = list(size = 5)))
+
+
+```
+
+## Permanova for Sugar Mol% between Mature and Senescent phase Kelp and between seasons and seasons broken down by developmental stage
+
+
+```{r}
+
+# Variance stabilize the sample centric metabolites relative adundance data
+
+POS_metab_c_4_permanova <- asin(sqrt(agg_specific_class_w_metadata_pca_shape_pos[1:42,6:259]))
+  
+
+# PERMANOVA of differences in metabolite composition by physiological state
+
+
+POS_metab_phys_state_adonis <- adonis2(POS_metab_c_4_permanova~ATTRIBUTE_phys_state, data = agg_specific_class_w_metadata_pca_shape_pos[1:42,], method = "bray")
+
+POS_metab_phys_state_adonis # R2 = 0.19 p = 0.001 F = 9.5544 stronger driver
+
+
+# PERMANOVA of differences in metabolite composition by season
+
+POS_metab_season_adonis <- adonis2(POS_metab_c_4_permanova~ATTRIBUTE_season, data = agg_specific_class_w_metadata_pca_shape_pos[1:42,], method = "bray")
+
+POS_metab_season_adonis # R2 = 0.14 p = 0.001 F = 6.6775, weaker driver than dev stage
+
+# PERMANOVA of differences in metabolite composition by season : Mature Kelp
+
+agg_specific_class_w_metadata_pca_shape_mature_pos <- agg_specific_class_w_metadata_pca_shape_pos %>% 
+  filter(ATTRIBUTE_phys_state == "Mature")
+
+POS_metab_c_4_permanova_mature <- asin(sqrt(agg_specific_class_w_metadata_pca_shape_mature_pos[1:24,6:259]))
+
+POS_metab_phys_state_adonis_mature <- adonis2(POS_metab_c_4_permanova_mature~ATTRIBUTE_season, data = agg_specific_class_w_metadata_pca_shape_mature_pos[1:24,], method = "bray")
+
+POS_metab_phys_state_adonis_mature # R2 = 0.25 p = 0.001 F = 7.4058
+
+
+# PERMANOVA of differences in metabolite composition by season : Senescent Kelp
+
+agg_specific_class_w_metadata_pca_shape_senescent <- agg_specific_class_w_metadata_pca_shape %>% 
+  filter(ATTRIBUTE_phys_state == "Senescent")
+
+NEG_metab_c_4_permanova_senescent <- asin(sqrt(agg_specific_class_w_metadata_pca_shape_senescent[1:18,6:360]))
+
+NEG_metab_phys_state_adonis_senescent <- adonis2(NEG_metab_c_4_permanova_senescent~ATTRIBUTE_season, data = agg_specific_class_w_metadata_pca_shape_senescent[1:18,], method = "bray")
+
+NEG_metab_phys_state_adonis_senescent # R2 = 0.31 p = 0.001 F = 7.3469
+
+```
+
